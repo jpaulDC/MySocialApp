@@ -1,0 +1,14 @@
+# Visual Studio / Backend
+.vs/
+SocialAppAPI/.vs/
+SocialAppAPI/SocialAppAPI/bin/
+SocialAppAPI/SocialAppAPI/obj/
+
+# React Native / Frontend
+frontend/node_modules/
+frontend/.expo/
+frontend/dist/
+
+# System
+.DS_Store
+Thumbs.db

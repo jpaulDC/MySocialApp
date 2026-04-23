@@ -1,0 +1,6 @@
+@SocialAppAPI_HostAddress = http://localhost:5261
+
+GET {{SocialAppAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

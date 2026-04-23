@@ -1,0 +1,13 @@
+﻿# --- Backend (ASP.NET) ---
+.vs/
+bin/
+obj/
+*.user
+
+# --- Frontend (React Native/Node) ---
+node_modules/
+.expo/
+npm-debug.log*
+
+# --- Others ---
+.DS_Store
