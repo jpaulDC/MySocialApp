@@ -31,15 +31,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
 
-        // ── BAGO: Allow SignalR to read JWT from query string ──
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
+                // Kinukuha ang token mula sa query string
+                // Kasi hindi kayang mag-send ng headers ang SignalR WebSocket
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                // Kung ang request ay papunta sa SignalR hub, basahin ang token mula sa URL
                 if (!string.IsNullOrEmpty(accessToken) &&
                     path.StartsWithSegments("/hubs/chat"))
                 {

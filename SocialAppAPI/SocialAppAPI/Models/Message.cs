@@ -1,4 +1,4 @@
-namespace SocialAppAPI.Models
+namespace SocialApp.API.Models
 {
     // Represents a chat message between two users
     public class Message
@@ -6,12 +6,12 @@ namespace SocialAppAPI.Models
         public int Id { get; set; }
 
         // Who sent the message
-        public int SenderId { get; set; }
-        public User Sender { get; set; } = null!;
+        public int  SenderId { get; set; }
+        public User Sender   { get; set; } = null!;
 
         // Who received the message
-        public int ReceiverId { get; set; }
-        public User Receiver { get; set; } = null!;
+        public int  ReceiverId { get; set; }
+        public User Receiver   { get; set; } = null!;
 
         public string Content { get; set; } = string.Empty; // Message text
 

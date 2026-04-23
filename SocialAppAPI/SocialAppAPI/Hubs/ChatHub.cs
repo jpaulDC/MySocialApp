@@ -1,73 +1,113 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Collections.Concurrent;
+using System.Security.Claims;
 using SocialAppAPI.Services;
+using SocialAppAPI.DTOs;
 
 namespace SocialAppAPI.Hubs
 {
-    [Authorize] // 🔒 Only authenticated users can connect
+    [Authorize] // 🔒 JWT required para makaconnect
     public class ChatHub : Hub
     {
         private readonly ChatService _chatService;
 
-        // Thread-safe dictionary: UserId → ConnectionId
-        // Tracks which users are currently connected
-        private static readonly ConcurrentDictionary<int, string>
-            OnlineUsers = new();
+        // ── CONNECTION MAP ─────────────────────────────────────────────
+        // Key   = UserId (string)
+        // Value = SignalR ConnectionId
+        // ConcurrentDictionary = thread-safe (maraming users ang sabay)
+        private static readonly ConcurrentDictionary<string, string>
+            _userConnections = new();
 
         public ChatHub(ChatService chatService)
         {
             _chatService = chatService;
         }
 
-        // ── CALLED WHEN A CLIENT CONNECTS ─────────────────────────────
+        // ══════════════════════════════════════════════════════════════
+        //  CONNECTION EVENTS
+        // ══════════════════════════════════════════════════════════════
+
+        // ── Kapag nag-connect ang user ─────────────────────────────────
         public override async Task OnConnectedAsync()
         {
+            // Kuhanin ang UserId mula sa JWT token
             var userId = GetCurrentUserId();
 
-            if (userId > 0)
+            if (!string.IsNullOrEmpty(userId))
             {
-                // Store this user's connection
-                OnlineUsers[userId] = Context.ConnectionId;
+                // I-save ang connection: UserId → ConnectionId
+                _userConnections[userId] = Context.ConnectionId;
 
-                // Add user to their personal group (for targeted messages)
+                // I-join ang user sa kanyang personal na group
+                // Group name = "user_123" (para sa userId = 123)
                 await Groups.AddToGroupAsync(
-                    Context.ConnectionId, $"user_{userId}");
+                    Context.ConnectionId,
+                    $"user_{userId}"
+                );
 
-                // Notify everyone that this user is now online
+                // Ipaalam sa lahat na naka-online na itong user
                 await Clients.Others.SendAsync("UserOnline", userId);
+
+                Console.WriteLine(
+                    $"✅ User {userId} connected. " +
+                    $"ConnectionId: {Context.ConnectionId}");
             }
 
             await base.OnConnectedAsync();
         }
 
-        // ── CALLED WHEN A CLIENT DISCONNECTS ──────────────────────────
+        // ── Kapag nag-disconnect ang user ─────────────────────────────
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             var userId = GetCurrentUserId();
 
-            if (userId > 0)
+            if (!string.IsNullOrEmpty(userId))
             {
-                // Remove from online users
-                OnlineUsers.TryRemove(userId, out _);
+                // Tanggalin sa connection map
+                _userConnections.TryRemove(userId, out _);
 
-                // Notify others this user went offline
+                // Ipaalam sa lahat na offline na
                 await Clients.Others.SendAsync("UserOffline", userId);
+
+                Console.WriteLine($"❌ User {userId} disconnected.");
             }
 
             await base.OnDisconnectedAsync(exception);
         }
 
-        // ── SEND MESSAGE (called by client) ────────────────────────────
-        // Client calls: hubConnection.invoke("SendMessage", receiverId, content)
-        public async Task SendMessage(int receiverId, string content)
+        // ══════════════════════════════════════════════════════════════
+        //  PRIVATE MESSAGING
+        // ══════════════════════════════════════════════════════════════
+
+        // ── SEND PRIVATE MESSAGE ───────────────────────────────────────
+        // Frontend calls:
+        // connection.invoke("SendPrivateMessage", receiverId, content)
+        //
+        // Note: senderId ay kinukuha mula sa JWT (hindi mula sa client)
+        //       para hindi makapag-impersonate ng ibang user
+        public async Task SendPrivateMessage(int receiverId, string content)
         {
-            var senderId = GetCurrentUserId();
+            // Kuhanin ang senderId mula sa JWT (trusted source)
+            var senderIdStr = GetCurrentUserId();
 
-            if (senderId <= 0 || string.IsNullOrWhiteSpace(content))
+            if (string.IsNullOrEmpty(senderIdStr))
+            {
+                await Clients.Caller.SendAsync(
+                    "Error", "Unauthorized: Invalid token.");
                 return;
+            }
 
-            // Validate content length
+            var senderId = int.Parse(senderIdStr);
+
+            // ── Validation ─────────────────────────────────────────────
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                await Clients.Caller.SendAsync(
+                    "Error", "Message cannot be empty.");
+                return;
+            }
+
             if (content.Length > 1000)
             {
                 await Clients.Caller.SendAsync(
@@ -75,73 +115,106 @@ namespace SocialAppAPI.Hubs
                 return;
             }
 
-            // Save message to database
-            var messageDto = await _chatService.SaveMessageAsync(
-                senderId, receiverId, content);
+            if (senderId == receiverId)
+            {
+                await Clients.Caller.SendAsync(
+                    "Error", "You cannot message yourself.");
+                return;
+            }
 
-            // Send to RECEIVER (if online) via their group
+            // ── Save sa existing Messages table ────────────────────────
+            MessageDto savedMessage;
+            try
+            {
+                savedMessage = await _chatService
+                    .SaveMessageAsync(senderId, receiverId, content);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving message: {ex.Message}");
+                await Clients.Caller.SendAsync(
+                    "Error", "Failed to save message.");
+                return;
+            }
+
+            // ── Send sa RECEIVER lang (private!) ───────────────────────
+            // Ginagamit natin ang Group "user_{receiverId}"
+            // para siguradong sa receiver lang mapupunta
             await Clients
                 .Group($"user_{receiverId}")
-                .SendAsync("ReceiveMessage", messageDto);
+                .SendAsync("ReceivePrivateMessage", savedMessage);
 
-            // Also echo back to SENDER (so they see their own message)
+            // ── Echo din sa SENDER (para makita niya ang sariling msg) ─
             await Clients
                 .Group($"user_{senderId}")
-                .SendAsync("ReceiveMessage", messageDto);
+                .SendAsync("ReceivePrivateMessage", savedMessage);
+
+            Console.WriteLine(
+                $"📨 Message from {senderId} to {receiverId}: {content}");
         }
 
-        // ── NOTIFY TYPING ──────────────────────────────────────────────
-        // Client calls: hubConnection.invoke("Typing", receiverId)
+        // ══════════════════════════════════════════════════════════════
+        //  TYPING INDICATORS
+        // ══════════════════════════════════════════════════════════════
+
+        // ── Nagta-type ang user ────────────────────────────────────────
+        // Frontend calls: connection.invoke("Typing", receiverId)
         public async Task Typing(int receiverId)
         {
-            var senderId = GetCurrentUserId();
-            if (senderId <= 0) return;
+            var senderIdStr = GetCurrentUserId();
+            if (string.IsNullOrEmpty(senderIdStr)) return;
 
-            // Tell the receiver that someone is typing
+            // Ipadala lang sa receiver ang typing indicator
             await Clients
                 .Group($"user_{receiverId}")
-                .SendAsync("UserTyping", senderId);
+                .SendAsync("UserTyping", int.Parse(senderIdStr));
         }
 
-        // ── STOP TYPING ───────────────────────────────────────────────
+        // ── Tumigil na ang pag-type ────────────────────────────────────
+        // Frontend calls: connection.invoke("StopTyping", receiverId)
         public async Task StopTyping(int receiverId)
         {
-            var senderId = GetCurrentUserId();
-            if (senderId <= 0) return;
+            var senderIdStr = GetCurrentUserId();
+            if (string.IsNullOrEmpty(senderIdStr)) return;
 
             await Clients
                 .Group($"user_{receiverId}")
-                .SendAsync("UserStoppedTyping", senderId);
+                .SendAsync("UserStoppedTyping", int.Parse(senderIdStr));
         }
 
-        // ── MARK MESSAGES AS READ ──────────────────────────────────────
-        // Client calls: hubConnection.invoke("MarkRead", otherUserId)
-        public async Task MarkRead(int otherUserId)
-        {
-            var userId = GetCurrentUserId();
-            if (userId <= 0) return;
+        // ══════════════════════════════════════════════════════════════
+        //  ONLINE STATUS
+        // ══════════════════════════════════════════════════════════════
 
-            await _chatService.MarkAsReadAsync(userId, otherUserId);
-
-            // Notify sender that messages were read (for read receipts)
-            await Clients
-                .Group($"user_{otherUserId}")
-                .SendAsync("MessagesRead", userId);
-        }
-
-        // ── CHECK IF USER IS ONLINE ────────────────────────────────────
+        // ── Check kung online ang isang user ──────────────────────────
+        // Frontend calls: connection.invoke("CheckOnlineStatus", targetUserId)
         public async Task CheckOnlineStatus(int targetUserId)
         {
-            var isOnline = OnlineUsers.ContainsKey(targetUserId);
-            await Clients.Caller.SendAsync("OnlineStatus", targetUserId, isOnline);
+            var isOnline = _userConnections
+                .ContainsKey(targetUserId.ToString());
+
+            // Ibalik lang sa caller (hindi broadcast)
+            await Clients.Caller.SendAsync(
+                "OnlineStatus", targetUserId, isOnline);
         }
 
-        // ── HELPER: Get current user ID from JWT claim ─────────────────
-        private int GetCurrentUserId()
+        // ── Get list of all online users ──────────────────────────────
+        // Frontend calls: connection.invoke("GetOnlineUsers")
+        public async Task GetOnlineUsers()
         {
-            var claim = Context.User?
-                .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            return int.TryParse(claim, out var id) ? id : 0;
+            var onlineUserIds = _userConnections.Keys.ToList();
+            await Clients.Caller.SendAsync("OnlineUsersList", onlineUserIds);
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  HELPER
+        // ══════════════════════════════════════════════════════════════
+
+        // Kuhanin ang UserId mula sa JWT claims
+        private string? GetCurrentUserId()
+        {
+            return Context.User?
+                .FindFirst(ClaimTypes.NameIdentifier)?.Value;
         }
     }
 }

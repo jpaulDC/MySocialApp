@@ -2,23 +2,33 @@ import * as signalR from "@microsoft/signalr";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "./api";
 
-const BASE_URL = "http://192.168.1.105:5261/api"; // ⚠️ Palitan ng IP mo
+// ⚠️ Palitan ng actual IP ng computer mo
+const BASE_URL = "http://192.168.1.105:5261";
 
-// ── TYPES ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+//  TYPES
+// ══════════════════════════════════════════════════════════════════════
+
 export interface Message {
   id: number;
   content: string;
   isRead: boolean;
   sentAt: string;
   readAt?: string;
+
+  // Sender info
   senderId: number;
   senderUsername: string;
   senderFullName?: string;
   senderPicture?: string;
+
+  // Receiver info
   receiverId: number;
   receiverUsername: string;
   receiverFullName?: string;
   receiverPicture?: string;
+
+  // Helper flag – true kung ikaw ang nagpadala
   isMyMessage: boolean;
 }
 
@@ -33,9 +43,11 @@ export interface Conversation {
   isLastMessageMine: boolean;
 }
 
-// ── REST API CALLS ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+//  REST API CALLS
+// ══════════════════════════════════════════════════════════════════════
 
-// Get chat history with a specific user
+// Kunin ang chat history kasama ang isang specific user
 export const getConversation = async (
   otherUserId: number,
   page = 1,
@@ -44,59 +56,72 @@ export const getConversation = async (
   return res.data;
 };
 
-// Get inbox (all conversations)
+// Kunin ang lahat ng conversations (inbox)
 export const getConversations = async (): Promise<Conversation[]> => {
   const res = await api.get("/chat/conversations");
   return res.data;
 };
 
-// Get total unread message count
+// Kunin ang total unread count (para sa badge)
 export const getUnreadCount = async (): Promise<number> => {
   const res = await api.get("/chat/unread");
   return res.data.unreadCount;
 };
 
-// ── SIGNALR CONNECTION ─────────────────────────────────────────────────
+// Mark messages as read
+export const markAsRead = async (otherUserId: number): Promise<void> => {
+  await api.put(`/chat/read/${otherUserId}`);
+};
 
-let connection: signalR.HubConnection | null = null;
+// ══════════════════════════════════════════════════════════════════════
+//  SIGNALR CONNECTION MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════
 
-// Build and start the SignalR connection
+// Singleton connection – isa lang ang connection sa buong app
+let hubConnection: signalR.HubConnection | null = null;
+
+// ── BUILD AT START NG SIGNALR CONNECTION ───────────────────────────────
 export const startSignalRConnection =
   async (): Promise<signalR.HubConnection> => {
-    // If already connected, return existing connection
+    // Kung connected na, ibalik ang existing connection
     if (
-      connection &&
-      connection.state === signalR.HubConnectionState.Connected
+      hubConnection &&
+      hubConnection.state === signalR.HubConnectionState.Connected
     ) {
-      return connection;
+      return hubConnection;
     }
 
-    // Get JWT token for auth
+    // Kuhanin ang JWT token
     const token = await AsyncStorage.getItem("token");
 
-    connection = new signalR.HubConnectionBuilder()
+    // I-build ang connection
+    hubConnection = new signalR.HubConnectionBuilder()
       .withUrl(`${BASE_URL}/hubs/chat`, {
-        // Pass token as query param (required for SignalR)
+        // JWT token bilang query param (kailangan ng SignalR)
         accessTokenFactory: () => token ?? "",
       })
-      .withAutomaticReconnect([0, 2000, 5000, 10000]) // Retry delays in ms
-      .configureLogging(signalR.LogLevel.Information)
+      // Auto-reconnect: 0s, 2s, 5s, 10s, 30s
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+      .configureLogging(signalR.LogLevel.Warning)
       .build();
 
-    await connection.start();
-    console.log("✅ SignalR connected!");
+    // I-start ang connection
+    await hubConnection.start();
+    console.log("✅ SignalR connected! State:", hubConnection.state);
 
-    return connection;
+    return hubConnection;
   };
 
-// Stop the SignalR connection (on logout)
+// ── STOP CONNECTION (kapag nag-logout) ────────────────────────────────
 export const stopSignalRConnection = async (): Promise<void> => {
-  if (connection) {
-    await connection.stop();
-    connection = null;
-    console.log("SignalR disconnected.");
+  if (hubConnection) {
+    await hubConnection.stop();
+    hubConnection = null;
+    console.log("🔌 SignalR disconnected.");
   }
 };
 
-// Get current connection (null if not connected)
-export const getConnection = (): signalR.HubConnection | null => connection;
+// ── GET CURRENT CONNECTION ─────────────────────────────────────────────
+export const getHubConnection = (): signalR.HubConnection | null => {
+  return hubConnection;
+};

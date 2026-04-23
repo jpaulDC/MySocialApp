@@ -2,21 +2,21 @@
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    View,
+  Alert,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Button,
-    Chip,
-    Divider,
-    Surface,
-    Text,
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Chip,
+  Divider,
+  Surface,
+  Text,
 } from "react-native-paper";
 import { getMyProfile, UserProfile } from "../../services/userService";
 

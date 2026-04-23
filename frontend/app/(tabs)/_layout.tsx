@@ -20,9 +20,9 @@ export default function TabLayout() {
         // ── MODERN TAB BAR STYLE ──
         tabBarStyle: {
           backgroundColor: colorScheme === "dark" ? "#121212" : "#ffffff",
-          borderTopWidth: 0, // Tinanggal ang linya sa taas
-          elevation: 20, // Shadow para sa Android
-          shadowColor: "#000", // Shadow para sa iOS
+          borderTopWidth: 0,
+          elevation: 20,
+          shadowColor: "#000",
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.1,
           shadowRadius: 10,
@@ -32,16 +32,15 @@ export default function TabLayout() {
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          fontWeight: "700", // Mas makapal na font para sa modern look
+          fontWeight: "700",
         },
       }}
     >
-      {/* ── HOME (INDEX) ── */}
+      {/* ── HOME (Ito na yung main feed mo) ── */}
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
-          href: null, // Pinanatiling null gaya ng gusto mo
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}
@@ -52,13 +51,29 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ── HOME (REDUNDANT) ── */}
+      {/* ── FRIENDS ── */}
       <Tabs.Screen
-        name="home"
+        name="friends"
         options={{
+          title: "Friends",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? "home" : "home-outline"}
+              name={focused ? "people" : "people-outline"}
+              size={26}
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      {/* ── REELS ── */}
+      <Tabs.Screen
+        name="reels"
+        options={{
+          title: "Reels",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "play-circle" : "play-circle-outline"}
               size={26}
               color={color}
             />
@@ -81,62 +96,15 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ── HIDDEN SCREENS (WALANG BINAGO) ── */}
+      {/* ── HIDDEN SCREENS (Hindi lalabas sa bottom bar) ── */}
+      <Tabs.Screen name="home" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
+      <Tabs.Screen name="chat" options={{ href: null }} />
+      <Tabs.Screen name="inbox" options={{ href: null }} />
       <Tabs.Screen name="post-detail" options={{ href: null }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
-
-      <Tabs.Screen
-        name="create-post"
-        options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "add-circle" : "add-circle-outline"}
-              size={26}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="reels"
-        options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "play-circle" : "play-circle-outline"}
-              size={26}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="friends"
-        options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "people" : "people-outline"}
-              size={26}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="upload-reel"
-        options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "cloud-upload" : "cloud-upload-outline"}
-              size={26}
-              color={color}
-            />
-          ),
-        }}
-      />
+      <Tabs.Screen name="create-post" options={{ href: null }} />
+      <Tabs.Screen name="upload-reel" options={{ href: null }} />
     </Tabs>
   );
 }

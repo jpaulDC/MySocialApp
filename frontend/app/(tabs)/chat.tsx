@@ -4,265 +4,395 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { jwtDecode } from "jwt-decode";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    View
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  View
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    IconButton,
-    TextInput as PaperInput,
-    Surface,
-    Text,
+  ActivityIndicator,
+  Avatar,
+  IconButton,
+  TextInput as PaperInput,
+  Surface,
+  Text,
 } from "react-native-paper";
 import {
-    getConversation,
-    Message,
-    startSignalRConnection
+  getConversation,
+  getHubConnection,
+  markAsRead,
+  Message,
+  startSignalRConnection,
 } from "../../services/chatService";
 
-const BASE_URL = "http://192.168.1.XXX:5000";
+// ⚠️ Palitan ng IP mo
+const BASE_URL = "http://192.168.1.105:5261";
 
-// Helper: format time
-function formatMsgTime(dateStr: string): string {
+// Helper: format time (e.g. "2:30 PM")
+function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
+// Helper: format date divider (e.g. "Today", "Yesterday", "Jan 5")
+function formatDateLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const diff = Math.floor((today.getTime() - date.getTime()) / 86400000);
+
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 export default function ChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Other user info (passed from inbox or friend list)
-  const otherUserId = Number(params.userId);
-  const otherName = (params.fullName as string) || (params.username as string);
-  const otherPic = params.picture as string;
+  // ── Params mula sa navigation ──────────────────────────────────────
+  const receiverId = Number(params.userId);
+  const receiverName =
+    (params.fullName as string) || (params.username as string) || "User";
+  const receiverPic = params.picture as string;
 
+  // ── State ──────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [isTyping, setIsTyping] = useState(false); // Other user typing?
+  const [isTyping, setIsTyping] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
   const [myUserId, setMyUserId] = useState<number | null>(null);
-  const [connection, setConnection] = useState<signalR.HubConnection | null>(
-    null,
-  );
+  const [conn, setConn] = useState<signalR.HubConnection | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false); // Para hindi masyado maraming invoke
 
-  // Get current user ID from JWT
+  // ── STEP 1: Kuhanin ang myUserId mula sa JWT ───────────────────────
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUserId = async () => {
       const token = await AsyncStorage.getItem("token");
       if (token) {
         const decoded: any = jwtDecode(token);
         const id =
           decoded[
-            "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+            "http://schemas.xmlsoap.org/" +
+              "ws/2005/05/identity/claims/nameidentifier"
           ];
         setMyUserId(Number(id));
       }
     };
-    loadUser();
+    loadUserId();
   }, []);
 
-  // Load chat history + connect to SignalR
+  // ── STEP 2: Load chat history + setup SignalR ──────────────────────
   useEffect(() => {
-    const setup = async () => {
+    if (!myUserId) return; // Hintayin muna ang userId
+
+    const setupChat = async () => {
       try {
-        // Load previous messages
-        const history = await getConversation(otherUserId);
+        // Load existing messages mula sa REST API
+        const history = await getConversation(receiverId);
         setMessages(history);
 
-        // Connect to SignalR hub
-        const conn = await startSignalRConnection();
-        setConnection(conn);
+        // Mark existing messages as read
+        await markAsRead(receiverId);
 
-        // Listen for incoming messages
-        conn.on("ReceiveMessage", (msg: Message) => {
-          // Only add messages relevant to THIS conversation
-          if (
-            (msg.senderId === otherUserId && msg.receiverId === myUserId) ||
-            (msg.senderId === myUserId && msg.receiverId === otherUserId)
-          ) {
-            setMessages((prev) => {
-              // Avoid duplicate messages
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-            scrollToBottom();
+        // Kumonekta sa SignalR Hub
+        const connection = await startSignalRConnection();
+        setConn(connection);
+
+        // ── Listen sa incoming PRIVATE messages ──────────────────────
+        // Tanggapin lang ang messages na para sa conversation na ito
+        connection.on("ReceivePrivateMessage", (msg: Message) => {
+          // Filter: para lang sa conversation natin
+          const isRelevant =
+            (msg.senderId === receiverId && msg.receiverId === myUserId) ||
+            (msg.senderId === myUserId && msg.receiverId === receiverId);
+
+          if (!isRelevant) return;
+
+          setMessages((prev) => {
+            // Iwasan ang duplicate messages
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+
+          // Scroll to bottom para makita ang bagong message
+          scrollToBottom();
+
+          // Mark as read agad kung ikaw ang receiver
+          if (msg.senderId === receiverId) {
+            markAsRead(receiverId).catch(() => {});
           }
         });
 
-        // Listen for typing indicators
-        conn.on("UserTyping", (userId: number) => {
-          if (userId === otherUserId) setIsTyping(true);
-        });
-        conn.on("UserStoppedTyping", (userId: number) => {
-          if (userId === otherUserId) setIsTyping(false);
+        // ── Listen sa typing indicator ────────────────────────────────
+        connection.on("UserTyping", (userId: number) => {
+          if (userId === receiverId) setIsTyping(true);
         });
 
-        // Listen for read receipts
-        conn.on("MessagesRead", (userId: number) => {
-          if (userId === otherUserId) {
-            setMessages((prev) => prev.map((m) => ({ ...m, isRead: true })));
-          }
+        connection.on("UserStoppedTyping", (userId: number) => {
+          if (userId === receiverId) setIsTyping(false);
         });
 
-        // Mark incoming messages as read
-        await conn.invoke("MarkRead", otherUserId);
+        // ── Listen sa online status ───────────────────────────────────
+        connection.on("OnlineStatus", (userId: number, online: boolean) => {
+          if (userId === receiverId) setIsOnline(online);
+        });
+
+        connection.on("UserOnline", (userId: string) => {
+          if (Number(userId) === receiverId) setIsOnline(true);
+        });
+
+        connection.on("UserOffline", (userId: string) => {
+          if (Number(userId) === receiverId) setIsOnline(false);
+        });
+
+        // Check kung online ang receiver
+        await connection.invoke("CheckOnlineStatus", receiverId);
       } catch (err) {
-        Alert.alert("Error", "Failed to connect to chat.");
+        console.error("Chat setup error:", err);
+        Alert.alert(
+          "Connection Error",
+          "Failed to connect to chat. Please try again.",
+        );
       } finally {
         setLoading(false);
       }
     };
 
-    if (myUserId) setup();
-  }, [myUserId, otherUserId]);
+    setupChat();
 
-  // Scroll to bottom when messages change
+    // Cleanup: tanggalin ang event listeners kapag umalis sa screen
+    return () => {
+      const connection = getHubConnection();
+      if (connection) {
+        connection.off("ReceivePrivateMessage");
+        connection.off("UserTyping");
+        connection.off("UserStoppedTyping");
+        connection.off("OnlineStatus");
+      }
+      // Clear typing timer
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, [myUserId, receiverId]);
+
+  // ── Auto-scroll kapag may bagong message ──────────────────────────
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+  }, []);
+
   useEffect(() => {
     if (messages.length > 0) scrollToBottom();
   }, [messages.length]);
 
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  };
+  // ══════════════════════════════════════════════════════════════════
+  //  ACTIONS
+  // ══════════════════════════════════════════════════════════════════
 
-  // ── SEND MESSAGE ───────────────────────────────────────────────────
+  // ── SEND PRIVATE MESSAGE ───────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
-    if (!text || !connection || sending) return;
+    if (!text || !conn || sending) return;
 
-    setSending(true);
+    // I-clear ang input agad (better UX)
     setInputText("");
+    setSending(true);
 
     try {
-      // Send via SignalR (real-time)
-      await connection.invoke("SendMessage", otherUserId, text);
+      // Invoke ang SignalR method – PRIVATE lang, hindi broadcast!
+      // senderId ay hindi na kailangan ipadala – kukuhanin sa JWT sa server
+      await conn.invoke("SendPrivateMessage", receiverId, text);
 
       // Stop typing indicator
-      await connection.invoke("StopTyping", otherUserId);
-    } catch {
-      Alert.alert("Error", "Failed to send message.");
-      setInputText(text); // Restore on error
+      if (isTypingRef.current) {
+        await conn.invoke("StopTyping", receiverId);
+        isTypingRef.current = false;
+      }
+    } catch (err) {
+      console.error("Send error:", err);
+      // Ibalik ang text kapag may error
+      setInputText(text);
+      Alert.alert("Error", "Failed to send message. Please try again.");
     } finally {
       setSending(false);
     }
-  }, [inputText, connection, otherUserId, sending]);
+  }, [inputText, conn, receiverId, sending]);
 
   // ── TYPING INDICATOR ───────────────────────────────────────────────
   const handleInputChange = useCallback(
     (text: string) => {
       setInputText(text);
 
-      if (!connection) return;
+      if (!conn) return;
 
-      // Send "typing" signal
-      connection.invoke("Typing", otherUserId).catch(() => {});
+      // Mag-send ng "Typing" signal (once lang, hindi paulit-ulit)
+      if (!isTypingRef.current && text.length > 0) {
+        isTypingRef.current = true;
+        conn.invoke("Typing", receiverId).catch(() => {});
+      }
 
-      // Stop typing after 2 seconds of inactivity
+      // Clear ang dating timer
       if (typingTimer.current) clearTimeout(typingTimer.current);
-      typingTimer.current = setTimeout(() => {
-        connection.invoke("StopTyping", otherUserId).catch(() => {});
+
+      // Stop typing after 2 seconds ng walang input
+      typingTimer.current = setTimeout(async () => {
+        if (isTypingRef.current) {
+          isTypingRef.current = false;
+          conn.invoke("StopTyping", receiverId).catch(() => {});
+        }
       }, 2000);
+
+      // Kung nag-clear ng input, stop typing agad
+      if (text.length === 0 && isTypingRef.current) {
+        isTypingRef.current = false;
+        conn.invoke("StopTyping", receiverId).catch(() => {});
+      }
     },
-    [connection, otherUserId],
+    [conn, receiverId],
   );
 
+  // ══════════════════════════════════════════════════════════════════
+  //  RENDER
+  // ══════════════════════════════════════════════════════════════════
+
   // ── RENDER EACH MESSAGE BUBBLE ─────────────────────────────────────
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isMe = item.isMyMessage;
-    const prevMsg = messages[index - 1];
-    // Show avatar only for first message in a sequence from same sender
-    const showAvatar =
-      !isMe && (!prevMsg || prevMsg.senderId !== item.senderId);
+  const renderMessage = useCallback(
+    ({ item, index }: { item: Message; index: number }) => {
+      const isMe = item.isMyMessage;
 
-    const avatarUri = !isMe && otherPic ? `${BASE_URL}${otherPic}` : null;
-    const initials = otherName[0].toUpperCase();
+      // Check kung kailangan ng date divider
+      const prevMsg = messages[index - 1];
+      const currentDate = new Date(item.sentAt).toDateString();
+      const prevDate = prevMsg ? new Date(prevMsg.sentAt).toDateString() : null;
+      const showDateLabel = currentDate !== prevDate;
 
-    return (
-      <View
-        style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowOther]}
-      >
-        {/* Avatar (other person only) */}
-        {!isMe && (
-          <View style={styles.msgAvatarSlot}>
-            {showAvatar ? (
-              avatarUri ? (
-                <Avatar.Image size={30} source={{ uri: avatarUri }} />
-              ) : (
-                <Avatar.Text
-                  size={30}
-                  label={initials}
-                  style={styles.smallAvatar}
-                />
-              )
-            ) : (
-              // Spacer to keep alignment
-              <View style={{ width: 30 }} />
-            )}
-          </View>
-        )}
+      // Check kung kailangan ng avatar
+      // (ipakita lang sa unang message ng sequence mula sa receiver)
+      const nextMsg = messages[index + 1];
+      const showAvatar =
+        !isMe &&
+        (!nextMsg || nextMsg.isMyMessage || nextMsg.senderId !== item.senderId);
 
-        <View style={styles.msgContent}>
-          {/* Message bubble */}
+      const avatarUri =
+        !isMe && receiverPic ? `${BASE_URL}${receiverPic}` : null;
+      const initials = receiverName[0].toUpperCase();
+
+      return (
+        <>
+          {/* ── DATE DIVIDER ── */}
+          {showDateLabel && (
+            <View style={styles.dateDivider}>
+              <View style={styles.dateLine} />
+              <Text style={styles.dateLabel}>
+                {formatDateLabel(item.sentAt)}
+              </Text>
+              <View style={styles.dateLine} />
+            </View>
+          )}
+
+          {/* ── MESSAGE ROW ── */}
           <View
-            style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}
+            style={[
+              styles.msgRow,
+              isMe ? styles.msgRowRight : styles.msgRowLeft,
+            ]}
           >
-            <Text
+            {/* Avatar (receiver side only) */}
+            {!isMe && (
+              <View style={styles.avatarSlot}>
+                {showAvatar ? (
+                  avatarUri ? (
+                    <Avatar.Image size={28} source={{ uri: avatarUri }} />
+                  ) : (
+                    <Avatar.Text
+                      size={28}
+                      label={initials}
+                      style={styles.avatarText}
+                    />
+                  )
+                ) : (
+                  // Spacer para maayos ang alignment
+                  <View style={{ width: 28 }} />
+                )}
+              </View>
+            )}
+
+            {/* Message bubble + meta */}
+            <View
               style={[
-                styles.bubbleText,
-                isMe ? styles.bubbleTextMe : styles.bubbleTextOther,
+                styles.msgContent,
+                isMe ? styles.msgContentRight : styles.msgContentLeft,
               ]}
             >
-              {item.content}
-            </Text>
-          </View>
-
-          {/* Time + Read receipt */}
-          <View
-            style={[styles.msgMeta, isMe ? { alignItems: "flex-end" } : {}]}
-          >
-            <Text style={styles.msgTime}>{formatMsgTime(item.sentAt)}</Text>
-            {/* Read checkmark for my messages */}
-            {isMe && (
-              <Text
+              {/* ── BUBBLE ── */}
+              <View
                 style={[
-                  styles.readReceipt,
-                  item.isRead && styles.readReceiptRead,
+                  styles.bubble,
+                  isMe ? styles.bubbleSent : styles.bubbleReceived,
                 ]}
               >
-                {item.isRead ? " ✓✓" : " ✓"}
-              </Text>
-            )}
-          </View>
-        </View>
-      </View>
-    );
-  };
+                <Text
+                  style={[
+                    styles.bubbleText,
+                    isMe ? styles.bubbleTextSent : styles.bubbleTextReceived,
+                  ]}
+                >
+                  {item.content}
+                </Text>
+              </View>
 
-  // ── LOADING ────────────────────────────────────────────────────────
+              {/* ── TIME + READ RECEIPT ── */}
+              <View
+                style={[
+                  styles.msgMeta,
+                  isMe
+                    ? { alignItems: "flex-end" }
+                    : { alignItems: "flex-start" },
+                ]}
+              >
+                <Text style={styles.msgTime}>
+                  {formatTime(item.sentAt)}
+                  {/* Read receipt para sa sent messages */}
+                  {isMe && (
+                    <Text
+                      style={[
+                        styles.readReceipt,
+                        item.isRead && styles.readReceiptSeen,
+                      ]}
+                    >
+                      {item.isRead ? "  ✓✓" : "  ✓"}
+                    </Text>
+                  )}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </>
+      );
+    },
+    [messages, receiverName, receiverPic, myUserId],
+  );
+
+  // ── LOADING SCREEN ─────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 10 }}>Loading chat...</Text>
+        <ActivityIndicator size="large" color="#6200ee" />
+        <Text style={styles.loadingText}>Connecting to chat...</Text>
       </View>
     );
   }
 
-  const avatarUri = otherPic ? `${BASE_URL}${otherPic}` : null;
+  const avatarUri = receiverPic ? `${BASE_URL}${receiverPic}` : null;
 
   return (
     <KeyboardAvoidingView
@@ -270,44 +400,75 @@ export default function ChatScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
-      {/* ── CHAT HEADER ── */}
-      <Surface style={styles.chatHeader} elevation={3}>
-        <IconButton icon="arrow-left" onPress={() => router.back()} />
-        {avatarUri ? (
-          <Avatar.Image size={40} source={{ uri: avatarUri }} />
-        ) : (
-          <Avatar.Text size={40} label={otherName[0].toUpperCase()} />
-        )}
+      {/* ══════════════════════════════════════════════════════════════
+           CHAT HEADER
+         ══════════════════════════════════════════════════════════════ */}
+      <Surface style={styles.header} elevation={3}>
+        {/* Back button */}
+        <IconButton icon="arrow-left" size={24} onPress={() => router.back()} />
+
+        {/* Avatar */}
+        <View style={styles.headerAvatar}>
+          {avatarUri ? (
+            <Avatar.Image size={42} source={{ uri: avatarUri }} />
+          ) : (
+            <Avatar.Text
+              size={42}
+              label={receiverName[0].toUpperCase()}
+              style={styles.headerAvatarText}
+            />
+          )}
+          {/* Online dot */}
+          {isOnline && <View style={styles.onlineDot} />}
+        </View>
+
+        {/* Name + status */}
         <View style={styles.headerInfo}>
-          <Text variant="titleMedium" style={styles.headerName}>
-            {otherName}
+          <Text
+            variant="titleMedium"
+            style={styles.headerName}
+            numberOfLines={1}
+          >
+            {receiverName}
           </Text>
-          {/* Typing indicator */}
           {isTyping ? (
             <Text style={styles.typingText}>typing...</Text>
           ) : (
-            <Text style={styles.onlineText}>● Online</Text>
+            <Text
+              style={[
+                styles.statusText,
+                isOnline ? styles.onlineText : styles.offlineText,
+              ]}
+            >
+              {isOnline ? "● Online" : "○ Offline"}
+            </Text>
           )}
         </View>
       </Surface>
 
-      {/* ── MESSAGES LIST ── */}
+      {/* ══════════════════════════════════════════════════════════════
+           MESSAGES LIST
+         ══════════════════════════════════════════════════════════════ */}
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
         contentContainerStyle={styles.messagesList}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={scrollToBottom}
         ListEmptyComponent={
-          <View style={styles.emptyChat}>
-            <Text style={styles.emptyChatIcon}>👋</Text>
-            <Text style={styles.emptyChatText}>Say hello to {otherName}!</Text>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>👋</Text>
+            <Text style={styles.emptyTitle}>Start a conversation!</Text>
+            <Text style={styles.emptySubtitle}>
+              Say hello to {receiverName}
+            </Text>
           </View>
         }
-        onContentSizeChange={scrollToBottom}
       />
 
-      {/* ── TYPING BUBBLE (other person typing) ── */}
+      {/* ── TYPING INDICATOR BUBBLE ── */}
       {isTyping && (
         <View style={styles.typingBubbleRow}>
           <View style={styles.typingBubble}>
@@ -316,33 +477,38 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* ── MESSAGE INPUT BAR ── */}
+      {/* ══════════════════════════════════════════════════════════════
+           MESSAGE INPUT BAR
+         ══════════════════════════════════════════════════════════════ */}
       <Surface style={styles.inputBar} elevation={4}>
         <PaperInput
           value={inputText}
           onChangeText={handleInputChange}
           placeholder="Type a message..."
+          placeholderTextColor="#aaa"
           mode="outlined"
-          style={styles.input}
           multiline
           maxLength={1000}
+          style={styles.input}
+          outlineStyle={styles.inputOutline}
           dense
-          outlineStyle={{ borderRadius: 24 }}
           right={
             <PaperInput.Icon
-              icon="send"
+              icon={sending ? "loading" : "send"}
               disabled={!inputText.trim() || sending}
-              color={inputText.trim() ? "#6200ee" : "#ccc"}
+              color={inputText.trim() && !sending ? "#6200ee" : "#ccc"}
               onPress={handleSend}
             />
           }
-          onSubmitEditing={handleSend}
         />
       </Surface>
     </KeyboardAvoidingView>
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════
+//  STYLES
+// ══════════════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -352,16 +518,38 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    gap: 12,
+  },
+  loadingText: {
+    color: "#666",
+    fontSize: 15,
   },
 
   // ── HEADER ───────────────────────────────────────────────────────
-  chatHeader: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "white",
-    paddingVertical: 6,
     paddingRight: 16,
-    gap: 10,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  headerAvatar: {
+    position: "relative",
+  },
+  headerAvatarText: {
+    backgroundColor: "#6200ee",
+  },
+  onlineDot: {
+    position: "absolute",
+    bottom: 1,
+    right: 1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#4CAF50",
+    borderWidth: 2,
+    borderColor: "white",
   },
   headerInfo: {
     flex: 1,
@@ -375,65 +563,80 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: "italic",
   },
+  statusText: {
+    fontSize: 12,
+  },
   onlineText: {
     color: "#4CAF50",
-    fontSize: 12,
+  },
+  offlineText: {
+    color: "#aaa",
   },
 
   // ── MESSAGES ─────────────────────────────────────────────────────
   messagesList: {
-    padding: 12,
-    paddingBottom: 8,
-    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    flexGrow: 1,
   },
   msgRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginVertical: 2,
+    marginBottom: 4,
   },
-  msgRowMe: {
-    justifyContent: "flex-end",
-  },
-  msgRowOther: {
+  msgRowLeft: {
     justifyContent: "flex-start",
   },
-  msgAvatarSlot: {
+  msgRowRight: {
+    justifyContent: "flex-end",
+  },
+  avatarSlot: {
     marginRight: 6,
     justifyContent: "flex-end",
   },
-  smallAvatar: {
+  avatarText: {
     backgroundColor: "#6200ee",
   },
   msgContent: {
-    maxWidth: "75%",
+    maxWidth: "72%",
   },
+  msgContentLeft: {
+    alignItems: "flex-start",
+  },
+  msgContentRight: {
+    alignItems: "flex-end",
+  },
+
+  // ── BUBBLES ──────────────────────────────────────────────────────
   bubble: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
+    maxWidth: "100%",
   },
-  bubbleMe: {
+  bubbleSent: {
     backgroundColor: "#6200ee",
     borderBottomRightRadius: 4,
   },
-  bubbleOther: {
+  bubbleReceived: {
     backgroundColor: "white",
     borderBottomLeftRadius: 4,
     elevation: 1,
   },
   bubbleText: {
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 22,
   },
-  bubbleTextMe: {
+  bubbleTextSent: {
     color: "white",
   },
-  bubbleTextOther: {
+  bubbleTextReceived: {
     color: "#1a1a2e",
   },
+
+  // ── MESSAGE META ──────────────────────────────────────────────────
   msgMeta: {
     flexDirection: "row",
-    alignItems: "center",
     marginTop: 3,
     paddingHorizontal: 4,
   },
@@ -442,29 +645,47 @@ const styles = StyleSheet.create({
     color: "#aaa",
   },
   readReceipt: {
-    fontSize: 11,
-    color: "#aaa",
+    fontSize: 10,
+    color: "#bbb",
   },
-  readReceiptRead: {
-    color: "#6200ee", // Purple when read
+  readReceiptSeen: {
+    color: "#6200ee", // Purple kapag na-read na
+  },
+
+  // ── DATE DIVIDER ──────────────────────────────────────────────────
+  dateDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+    gap: 10,
+  },
+  dateLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#ddd",
+  },
+  dateLabel: {
+    color: "#aaa",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   // ── TYPING BUBBLE ─────────────────────────────────────────────────
   typingBubbleRow: {
-    paddingHorizontal: 52,
-    paddingBottom: 4,
+    paddingHorizontal: 46,
+    paddingBottom: 6,
   },
   typingBubble: {
     backgroundColor: "white",
     borderRadius: 16,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     alignSelf: "flex-start",
     elevation: 1,
   },
   typingDots: {
     color: "#aaa",
-    letterSpacing: 3,
+    letterSpacing: 4,
     fontSize: 12,
   },
 
@@ -480,19 +701,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     maxHeight: 120,
   },
+  inputOutline: {
+    borderRadius: 24,
+    borderColor: "#ddd",
+  },
 
-  // ── EMPTY ─────────────────────────────────────────────────────────
-  emptyChat: {
+  // ── EMPTY STATE ───────────────────────────────────────────────────
+  emptyContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingTop: 80,
-    gap: 12,
+    gap: 8,
   },
-  emptyChatIcon: {
+  emptyIcon: {
     fontSize: 52,
+    marginBottom: 4,
   },
-  emptyChatText: {
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1a1a2e",
+  },
+  emptySubtitle: {
     color: "#888",
-    fontSize: 16,
+    fontSize: 14,
   },
 });

@@ -1,158 +1,134 @@
-﻿using Microsoft.EntityFrameworkCore;
-using SocialAppAPI.Data;
-using SocialAppAPI.DTOs;
-using SocialAppAPI.Models;
+﻿import api from './api';
+import * as signalR from '@microsoft/signalr';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-namespace SocialAppAPI.Services
+// ⚠️ Palitan ng actual IP ng computer mo
+const BASE_URL = 'http://192.168.1.105:5261';
+
+// ══════════════════════════════════════════════════════════════════════
+//  TYPES
+// ══════════════════════════════════════════════════════════════════════
+
+export interface Message
 {
-    public class ChatService
-    {
-        private readonly AppDbContext _context;
+    id: number;
+  content: string;
+  isRead: boolean;
+  sentAt: string;
+  readAt?: string;
 
-        public ChatService(AppDbContext context)
-        {
-            _context = context;
-        }
+  // Sender info
+  senderId: number;
+  senderUsername: string;
+  senderFullName?: string;
+  senderPicture?: string;
 
-        // ── SAVE MESSAGE TO DATABASE ───────────────────────────────────
-        public async Task<MessageDto> SaveMessageAsync(
-            int senderId, int receiverId, string content)
-        {
-            var message = new Message
-            {
-                SenderId = senderId,
-                ReceiverId = receiverId,
-                Content = content.Trim(),
-                SentAt = DateTime.UtcNow,
-                IsRead = false
-            };
+  // Receiver info
+  receiverId: number;
+  receiverUsername: string;
+  receiverFullName?: string;
+  receiverPicture?: string;
 
-            _context.Messages.Add(message);
-            await _context.SaveChangesAsync();
-
-            // Load sender and receiver info for the response
-            await _context.Entry(message)
-                .Reference(m => m.Sender).LoadAsync();
-            await _context.Entry(message)
-                .Reference(m => m.Receiver).LoadAsync();
-
-            return MapToDto(message, senderId);
-        }
-
-        // ── GET CONVERSATION HISTORY ───────────────────────────────────
-        public async Task<List<MessageDto>> GetConversationAsync(
-            int userId, int otherUserId, int page = 1, int pageSize = 30)
-        {
-            var messages = await _context.Messages
-                .Include(m => m.Sender)
-                .Include(m => m.Receiver)
-                .Where(m =>
-                    // Messages between these two users (both directions)
-                    (m.SenderId == userId && m.ReceiverId == otherUserId) ||
-                    (m.SenderId == otherUserId && m.ReceiverId == userId))
-                .OrderByDescending(m => m.SentAt) // Newest first
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-
-            // Reverse to show oldest at top (like a real chat)
-            messages.Reverse();
-
-            return messages.Select(m => MapToDto(m, userId)).ToList();
-        }
-
-        // ── GET ALL CONVERSATIONS (inbox) ──────────────────────────────
-        public async Task<List<ConversationDto>> GetConversationsAsync(int userId)
-        {
-            // Get all messages involving current user
-            var messages = await _context.Messages
-                .Include(m => m.Sender)
-                .Include(m => m.Receiver)
-                .Where(m => m.SenderId == userId || m.ReceiverId == userId)
-                .OrderByDescending(m => m.SentAt)
-                .ToListAsync();
-
-            // Group by the OTHER person in the conversation
-            var conversations = messages
-                .GroupBy(m => m.SenderId == userId ? m.ReceiverId : m.SenderId)
-                .Select(g =>
-                {
-                    var lastMsg = g.First(); // Most recent message
-                    var otherUser = lastMsg.SenderId == userId
-                        ? lastMsg.Receiver
-                        : lastMsg.Sender;
-
-                    // Count unread messages from the other person
-                    var unreadCount = g.Count(m =>
-                        m.SenderId == otherUser.Id &&
-                        m.ReceiverId == userId &&
-                        !m.IsRead);
-
-                    return new ConversationDto
-                    {
-                        OtherUserId = otherUser.Id,
-                        OtherUsername = otherUser.Username,
-                        OtherFullName = otherUser.FullName,
-                        OtherPicture = otherUser.ProfilePictureUrl,
-                        LastMessage = lastMsg.Content,
-                        LastMessageTime = lastMsg.SentAt,
-                        UnreadCount = unreadCount,
-                        IsLastMessageMine = lastMsg.SenderId == userId
-                    };
-                })
-                .OrderByDescending(c => c.LastMessageTime)
-                .ToList();
-
-            return conversations;
-        }
-
-        // ── MARK MESSAGES AS READ ──────────────────────────────────────
-        public async Task MarkAsReadAsync(int currentUserId, int otherUserId)
-        {
-            // Find all unread messages from the other user
-            var unread = await _context.Messages
-                .Where(m =>
-                    m.SenderId == otherUserId &&
-                    m.ReceiverId == currentUserId &&
-                    !m.IsRead)
-                .ToListAsync();
-
-            if (!unread.Any()) return;
-
-            foreach (var msg in unread)
-            {
-                msg.IsRead = true;
-                msg.ReadAt = DateTime.UtcNow;
-            }
-
-            await _context.SaveChangesAsync();
-        }
-
-        // ── GET TOTAL UNREAD COUNT (for badge notification) ────────────
-        public async Task<int> GetUnreadCountAsync(int userId)
-        {
-            return await _context.Messages
-                .CountAsync(m => m.ReceiverId == userId && !m.IsRead);
-        }
-
-        // ── HELPER: Map Message → MessageDto ───────────────────────────
-        private MessageDto MapToDto(Message message, int currentUserId) =>
-            new MessageDto
-            {
-                Id = message.Id,
-                Content = message.Content,
-                IsRead = message.IsRead,
-                SentAt = message.SentAt,
-                ReadAt = message.ReadAt,
-                SenderId = message.Sender.Id,
-                SenderUsername = message.Sender.Username,
-                SenderFullName = message.Sender.FullName,
-                SenderPicture = message.Sender.ProfilePictureUrl,
-                ReceiverId = message.Receiver.Id,
-                ReceiverUsername = message.Receiver.Username,
-                ReceiverFullName = message.Receiver.FullName,
-                ReceiverPicture = message.Receiver.ProfilePictureUrl,
-                IsMyMessage = message.SenderId == currentUserId
-            };
-    }
+  // Helper flag – true kung ikaw ang nagpadala
+  isMyMessage: boolean;
 }
+
+export interface Conversation
+{
+    otherUserId: number;
+  otherUsername: string;
+  otherFullName?: string;
+  otherPicture?: string;
+  lastMessage: string;
+  lastMessageTime: string;
+  unreadCount: number;
+  isLastMessageMine: boolean;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  REST API CALLS
+// ══════════════════════════════════════════════════════════════════════
+
+// Kunin ang chat history kasama ang isang specific user
+export const getConversation = async (
+  otherUserId: number,
+  page = 1
+): Promise<Message[]> => {
+    const res = await api.get(
+    `/ chat / conversation /${ otherUserId}?page =${ page}`
+  );
+    return res.data;
+};
+
+// Kunin ang lahat ng conversations (inbox)
+export const getConversations = async (): Promise<Conversation[]> => {
+    const res = await api.get('/chat/conversations');
+    return res.data;
+};
+
+// Kunin ang total unread count (para sa badge)
+export const getUnreadCount = async (): Promise<number> => {
+    const res = await api.get('/chat/unread');
+    return res.data.unreadCount;
+};
+
+// Mark messages as read
+export const markAsRead = async (otherUserId: number): Promise<void> => {
+    await api.put(`/ chat / read /${ otherUserId}`);
+};
+
+// ══════════════════════════════════════════════════════════════════════
+//  SIGNALR CONNECTION MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════
+
+// Singleton connection – isa lang ang connection sa buong app
+let hubConnection: signalR.HubConnection | null = null;
+
+// ── BUILD AT START NG SIGNALR CONNECTION ───────────────────────────────
+export const startSignalRConnection =
+  async (): Promise<signalR.HubConnection> => {
+
+    // Kung connected na, ibalik ang existing connection
+    if (
+      hubConnection &&
+      hubConnection.state === signalR.HubConnectionState.Connected
+    )
+    {
+        return hubConnection;
+    }
+
+    // Kuhanin ang JWT token
+    const token = await AsyncStorage.getItem('token');
+
+    // I-build ang connection
+    hubConnection = new signalR.HubConnectionBuilder()
+      .withUrl(`${ BASE_URL}/ hubs / chat`, {
+    // JWT token bilang query param (kailangan ng SignalR)
+    accessTokenFactory: () => token ?? '',
+    })
+    // Auto-reconnect: 0s, 2s, 5s, 10s, 30s
+    .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+    .configureLogging(signalR.LogLevel.Warning)
+    .build();
+
+    // I-start ang connection
+    await hubConnection.start();
+    console.log('✅ SignalR connected! State:', hubConnection.state);
+
+    return hubConnection;
+};
+
+// ── STOP CONNECTION (kapag nag-logout) ────────────────────────────────
+export const stopSignalRConnection = async (): Promise<void> => {
+    if (hubConnection)
+    {
+        await hubConnection.stop();
+        hubConnection = null;
+        console.log('🔌 SignalR disconnected.');
+    }
+};
+
+// ── GET CURRENT CONNECTION ─────────────────────────────────────────────
+export const getHubConnection = (): signalR.HubConnection | null => {
+    return hubConnection;
+};
