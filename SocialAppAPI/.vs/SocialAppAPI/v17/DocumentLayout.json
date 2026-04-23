@@ -3,24 +3,44 @@
   "WorkspaceRootPath": "D:\\MySocialApp\\SocialAppAPI\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Controllers\\UserController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Controllers\\UserController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\ChatService.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Services\\ChatService.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Hubs\\ChatHub.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Hubs\\ChatHub.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Controllers\\ChatController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Controllers\\ChatController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Data\\AppDbContext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Data\\AppDbContext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\SendMessageDto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\DTOs\\SendMessageDto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\MessageDto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\DTOs\\MessageDto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Models\\Message.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Models\\Message.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\UserProfileDto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\DTOs\\UserProfileDto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\UserService.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Services\\UserService.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Controllers\\UserController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Controllers\\UserController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\AuthService.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -33,6 +53,10 @@
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\PostService.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\Services\\PostService.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SocialAppAPI\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
     }
   ],
   "DocumentGroupContainers": [
@@ -42,7 +66,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 3,
+          "SelectedChildIndex": 7,
           "Children": [
             {
               "$type": "Bookmark",
@@ -50,19 +74,111 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "UserService.cs",
-              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\UserService.cs",
-              "RelativeDocumentMoniker": "SocialAppAPI\\Services\\UserService.cs",
-              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\UserService.cs",
-              "RelativeToolTip": "SocialAppAPI\\Services\\UserService.cs",
-              "ViewState": "AgIAABMAAAAAAAAAAAAYwCYAAAAAAAAAAAAAAA==",
+              "DocumentIndex": 4,
+              "Title": "AppDbContext.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Data\\AppDbContext.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\Data\\AppDbContext.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Data\\AppDbContext.cs",
+              "RelativeToolTip": "SocialAppAPI\\Data\\AppDbContext.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAA0AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-22T20:16:09.798Z"
+              "WhenOpened": "2026-04-23T11:40:43.363Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "ChatController.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Controllers\\ChatController.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\Controllers\\ChatController.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Controllers\\ChatController.cs",
+              "RelativeToolTip": "SocialAppAPI\\Controllers\\ChatController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABcAAAA6AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-23T11:12:19.863Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
+              "Title": "ChatService.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\ChatService.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\Services\\ChatService.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\ChatService.cs",
+              "RelativeToolTip": "SocialAppAPI\\Services\\ChatService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-23T11:12:09.712Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "ChatHub.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Hubs\\ChatHub.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\Hubs\\ChatHub.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Hubs\\ChatHub.cs",
+              "RelativeToolTip": "SocialAppAPI\\Hubs\\ChatHub.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAA1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-23T11:11:58.992Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "SendMessageDto.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\SendMessageDto.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\DTOs\\SendMessageDto.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\SendMessageDto.cs",
+              "RelativeToolTip": "SocialAppAPI\\DTOs\\SendMessageDto.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAkAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-23T11:11:28.383Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "MessageDto.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\MessageDto.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\DTOs\\MessageDto.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\MessageDto.cs",
+              "RelativeToolTip": "SocialAppAPI\\DTOs\\MessageDto.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAtAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-23T11:11:19.05Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Program.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\Program.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Program.cs",
+              "RelativeToolTip": "SocialAppAPI\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAAcAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-19T12:25:03.504Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "Message.cs",
+              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Models\\Message.cs",
+              "RelativeDocumentMoniker": "SocialAppAPI\\Models\\Message.cs",
+              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Models\\Message.cs",
+              "RelativeToolTip": "SocialAppAPI\\Models\\Message.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAAjAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-23T11:11:02.829Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
               "Title": "UserProfileDto.cs",
               "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\DTOs\\UserProfileDto.cs",
               "RelativeDocumentMoniker": "SocialAppAPI\\DTOs\\UserProfileDto.cs",
@@ -74,7 +190,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 9,
               "Title": "UserController.cs",
               "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Controllers\\UserController.cs",
               "RelativeDocumentMoniker": "SocialAppAPI\\Controllers\\UserController.cs",
@@ -82,36 +198,23 @@
               "RelativeToolTip": "SocialAppAPI\\Controllers\\UserController.cs",
               "ViewState": "AgIAADIAAAAAAAAAAAAowD8AAAAzAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-22T20:11:40.896Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-04-22T20:11:40.896Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 10,
               "Title": "AuthService.cs",
               "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\AuthService.cs",
               "RelativeDocumentMoniker": "SocialAppAPI\\Services\\AuthService.cs",
               "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\AuthService.cs",
               "RelativeToolTip": "SocialAppAPI\\Services\\AuthService.cs",
-              "ViewState": "AgIAAAwAAAAAAAAAAAAAABIAAABHAAAAAAAAAA==",
+              "ViewState": "AgIAAAoAAAAAAAAAAABBwBIAAABHAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-22T17:02:58.807Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "Program.cs",
-              "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Program.cs",
-              "RelativeDocumentMoniker": "SocialAppAPI\\Program.cs",
-              "ToolTip": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Program.cs",
-              "RelativeToolTip": "SocialAppAPI\\Program.cs",
-              "ViewState": "AgIAADIAAAAAAAAAAAAIwGEAAAAVAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-19T12:25:03.504Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 11,
               "Title": "Reel.cs",
               "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Models\\Reel.cs",
               "RelativeDocumentMoniker": "SocialAppAPI\\Models\\Reel.cs",
@@ -123,7 +226,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 12,
               "Title": "PostService.cs",
               "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\Services\\PostService.cs",
               "RelativeDocumentMoniker": "SocialAppAPI\\Services\\PostService.cs",
@@ -135,7 +238,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 13,
               "Title": "appsettings.json",
               "DocumentMoniker": "D:\\MySocialApp\\SocialAppAPI\\SocialAppAPI\\appsettings.json",
               "RelativeDocumentMoniker": "SocialAppAPI\\appsettings.json",

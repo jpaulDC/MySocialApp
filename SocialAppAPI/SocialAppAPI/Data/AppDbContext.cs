@@ -17,6 +17,7 @@ namespace SocialAppAPI.Data
         public DbSet<Reel> Reels { get; set; }
         public DbSet<ReelLike> ReelLikes { get; set; }
         public DbSet<ReelComment> ReelComments { get; set; }
+        public DbSet<Message> Messages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -104,6 +105,24 @@ namespace SocialAppAPI.Data
                 .HasOne(c => c.User).WithMany()
                 .HasForeignKey(c => c.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+
+            // ── MESSAGE ───────────────────────────────────────────────
+            // Sender → many messages sent
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.Sender).WithMany()
+                .HasForeignKey(m => m.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Receiver → many messages received
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.Receiver).WithMany()
+                .HasForeignKey(m => m.ReceiverId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Index for fast conversation queries
+            modelBuilder.Entity<Message>()
+                .HasIndex(m => new { m.SenderId, m.ReceiverId });
         }
     }
 }

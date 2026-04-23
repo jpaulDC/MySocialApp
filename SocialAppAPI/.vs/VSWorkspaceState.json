@@ -1,8 +1,12 @@
 {
   "ExpandedNodes": [
     "",
-    "\\SocialAppAPI"
+    "\\SocialAppAPI",
+    "\\SocialAppAPI\\Controllers",
+    "\\SocialAppAPI\\Data",
+    "\\SocialAppAPI\\Hubs",
+    "\\SocialAppAPI\\Services"
   ],
-  "SelectedNode": "\\SocialAppAPI\\Controllers",
+  "SelectedNode": "\\SocialAppAPI\\Program.cs",
   "PreviewInSolutionExplorer": false
 }
