@@ -1,47 +1,44 @@
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Badge,
-    Divider,
-    Surface,
-    Text,
+  ActivityIndicator,
+  Avatar,
+  Badge,
+  Divider,
+  Surface,
+  Text
 } from "react-native-paper";
 import {
-    Conversation,
-    getConversations,
-    getUnreadCount,
-    Message,
-    startSignalRConnection,
+  BASE_URL,
+  ChatMessage,
+  Conversation,
+  getChatConnection,
+  getConversations,
+  getUnreadCount,
+  startChatConnection,
 } from "../../services/chatService";
 
-const BASE_URL = "http://192.168.1.XXX:5000";
-
-// Helper: format time
+// ── Format timestamp ───────────────────────────────────────────────────
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / 86400000);
-
-  if (days === 0) {
+  const diff = Math.floor((now.getTime() - date.getTime()) / 86400000);
+  if (diff === 0)
     return date.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
+  if (diff === 1) return "Yesterday";
+  if (diff < 7) return `${diff}d ago`;
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 export default function InboxScreen() {
@@ -52,8 +49,8 @@ export default function InboxScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load conversations + set up real-time listener
-  const loadData = useCallback(async () => {
+  // ── Load inbox data ────────────────────────────────────────────────
+  const loadInbox = useCallback(async () => {
     try {
       const [convs, unread] = await Promise.all([
         getConversations(),
@@ -62,79 +59,98 @@ export default function InboxScreen() {
       setConversations(convs);
       setTotalUnread(unread);
     } catch {
-      Alert.alert("Error", "Failed to load conversations.");
+      Alert.alert("Error", "Failed to load messages.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  // Connect to SignalR and listen for new messages
+  // ── Setup: load data + SignalR listener ────────────────────────────
   useEffect(() => {
-    loadData();
+    loadInbox();
 
     const setupSignalR = async () => {
       try {
-        const conn = await startSignalRConnection();
+        const conn = await startChatConnection();
 
-        // When a new message arrives, refresh the inbox
-        conn.on("ReceiveMessage", (message: Message) => {
-          // Update conversation list with new last message
+        // Kapag may bagong private message → i-update ang inbox
+        conn.on("ReceivePrivateMessage", (msg: ChatMessage) => {
           setConversations((prev) => {
-            const otherUserId = message.isMyMessage
-              ? message.receiverId
-              : message.senderId;
+            const otherId = msg.isMyMessage ? msg.receiverId : msg.senderId;
 
-            const existing = prev.find((c) => c.otherUserId === otherUserId);
+            // I-update ang existing conversation
+            const updated = prev.map((c) => {
+              if (c.otherUserId !== otherId) return c;
+              return {
+                ...c,
+                lastMessage: msg.content,
+                lastMessageTime: msg.sentAt,
+                isLastMessageMine: msg.isMyMessage,
+                // Dagdagan ang unread kung hindi ako ang sender
+                unreadCount: msg.isMyMessage
+                  ? c.unreadCount
+                  : c.unreadCount + 1,
+              };
+            });
 
-            if (existing) {
-              // Update existing conversation
-              return prev
-                .map((c) =>
-                  c.otherUserId === otherUserId
-                    ? {
-                        ...c,
-                        lastMessage: message.content,
-                        lastMessageTime: message.sentAt,
-                        isLastMessageMine: message.isMyMessage,
-                        // Increment unread if message is from other person
-                        unreadCount: message.isMyMessage
-                          ? c.unreadCount
-                          : c.unreadCount + 1,
-                      }
-                    : c,
-                )
-                .sort(
-                  (a, b) =>
-                    new Date(b.lastMessageTime).getTime() -
-                    new Date(a.lastMessageTime).getTime(),
-                );
-            } else {
-              // New conversation – reload full list
-              loadData();
+            // Kung bagong conversation, i-reload
+            const exists = prev.some((c) => c.otherUserId === otherId);
+            if (!exists) {
+              loadInbox();
               return prev;
             }
+
+            // I-sort para pinakabago ay nasa taas
+            return [...updated].sort(
+              (a, b) =>
+                new Date(b.lastMessageTime).getTime() -
+                new Date(a.lastMessageTime).getTime(),
+            );
           });
 
-          // Update total unread badge
-          if (!message.isMyMessage) {
+          // I-update ang total unread badge
+          if (!msg.isMyMessage) {
             setTotalUnread((prev) => prev + 1);
           }
         });
       } catch (err) {
-        console.log("SignalR connection error:", err);
+        console.log("SignalR inbox error:", err);
       }
     };
 
     setupSignalR();
+
+    // Cleanup listeners kapag umalis sa screen
+    return () => {
+      const conn = getChatConnection();
+      if (conn) conn.off("ReceivePrivateMessage");
+    };
   }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadData();
+  // ── Open a conversation ────────────────────────────────────────────
+  const openChat = (conv: Conversation) => {
+    // I-reset ang unread count locally
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.otherUserId === conv.otherUserId ? { ...c, unreadCount: 0 } : c,
+      ),
+    );
+    setTotalUnread((prev) => Math.max(0, prev - conv.unreadCount));
+
+    // Navigate sa chat screen
+    router.push({
+      pathname: "/(tabs)/chat",
+      params: {
+        userId: conv.otherUserId.toString(),
+        username: conv.otherUsername,
+        fullName: conv.otherFullName ?? conv.otherUsername,
+        picture: conv.otherPicture ?? "",
+      },
+    });
   };
 
-  // ── RENDER EACH CONVERSATION ───────────────────────────────────────
+  // ── Render each conversation row ───────────────────────────────────
   const renderConversation = ({ item }: { item: Conversation }) => {
     const avatarUri = item.otherPicture
       ? `${BASE_URL}${item.otherPicture}`
@@ -144,37 +160,29 @@ export default function InboxScreen() {
     const hasUnread = item.unreadCount > 0;
 
     return (
-      <TouchableOpacity
-        onPress={() =>
-          router.push({
-            pathname: "/(tabs)/chat",
-            params: {
-              userId: item.otherUserId,
-              username: item.otherUsername,
-              fullName: item.otherFullName ?? item.otherUsername,
-              picture: item.otherPicture ?? "",
-            },
-          })
-        }
-      >
-        <View style={[styles.convItem, hasUnread && styles.convItemUnread]}>
+      <TouchableOpacity onPress={() => openChat(item)} activeOpacity={0.7}>
+        <View style={[styles.convRow, hasUnread && styles.convRowUnread]}>
           {/* Avatar */}
           <View style={styles.avatarWrapper}>
             {avatarUri ? (
               <Avatar.Image size={54} source={{ uri: avatarUri }} />
             ) : (
-              <Avatar.Text size={54} label={initials} />
+              <Avatar.Text
+                size={54}
+                label={initials}
+                style={styles.avatarFallback}
+              />
             )}
-            {/* Online indicator dot (placeholder) */}
-            <View style={styles.onlineDot} />
           </View>
 
           {/* Conversation info */}
           <View style={styles.convInfo}>
+            {/* Name + Time */}
             <View style={styles.convTop}>
               <Text
                 variant="titleSmall"
                 style={[styles.convName, hasUnread && styles.boldText]}
+                numberOfLines={1}
               >
                 {item.otherFullName ?? item.otherUsername}
               </Text>
@@ -182,6 +190,8 @@ export default function InboxScreen() {
                 {formatTime(item.lastMessageTime)}
               </Text>
             </View>
+
+            {/* Last message + Unread badge */}
             <View style={styles.convBottom}>
               <Text
                 variant="bodySmall"
@@ -191,9 +201,8 @@ export default function InboxScreen() {
                 {item.isLastMessageMine ? "You: " : ""}
                 {item.lastMessage}
               </Text>
-              {/* Unread badge */}
               {hasUnread && (
-                <Badge style={styles.badge}>{item.unreadCount}</Badge>
+                <Badge style={styles.unreadBadge}>{item.unreadCount}</Badge>
               )}
             </View>
           </View>
@@ -206,7 +215,7 @@ export default function InboxScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#6200ee" />
       </View>
     );
   }
@@ -229,16 +238,22 @@ export default function InboxScreen() {
         keyExtractor={(item) => item.otherUserId.toString()}
         renderItem={renderConversation}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadInbox();
+            }}
+          />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>💬</Text>
-            <Text variant="titleMedium" style={styles.emptyText}>
+            <Text variant="titleMedium" style={styles.emptyTitle}>
               No messages yet
             </Text>
-            <Text variant="bodySmall" style={styles.emptySubtext}>
-              Find friends and start chatting!
+            <Text variant="bodySmall" style={styles.emptySubtitle}>
+              Go to Friends and start a conversation!
             </Text>
           </View>
         }
@@ -260,11 +275,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
+  // ── HEADER ───────────────────────────────────────────────────────
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: "white",
     gap: 8,
   },
@@ -275,32 +292,28 @@ const styles = StyleSheet.create({
   headerBadge: {
     backgroundColor: "#e74c3c",
   },
-  convItem: {
+
+  // ── CONVERSATION ROW ──────────────────────────────────────────────
+  convRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: "white",
     gap: 12,
   },
-  convItemUnread: {
-    backgroundColor: "#f0f4ff", // Light blue for unread
+  convRowUnread: {
+    backgroundColor: "#f5f0ff", // Light purple for unread
   },
   avatarWrapper: {
     position: "relative",
   },
-  onlineDot: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: "#4CAF50",
-    borderWidth: 2,
-    borderColor: "white",
+  avatarFallback: {
+    backgroundColor: "#6200ee",
   },
   convInfo: {
     flex: 1,
+    justifyContent: "center",
   },
   convTop: {
     flexDirection: "row",
@@ -311,10 +324,11 @@ const styles = StyleSheet.create({
   convName: {
     color: "#1a1a2e",
     flex: 1,
+    marginRight: 8,
   },
   convTime: {
     fontSize: 11,
-    color: "#888",
+    color: "#aaa",
   },
   convBottom: {
     flexDirection: "row",
@@ -330,26 +344,29 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1a1a2e",
   },
-  badge: {
+  unreadBadge: {
     backgroundColor: "#6200ee",
   },
+
+  // ── EMPTY STATE ───────────────────────────────────────────────────
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
+    gap: 8,
   },
   emptyIcon: {
     fontSize: 56,
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  emptyText: {
+  emptyTitle: {
     fontWeight: "bold",
     color: "#1a1a2e",
+    textAlign: "center",
   },
-  emptySubtext: {
+  emptySubtitle: {
     color: "#888",
-    marginTop: 8,
     textAlign: "center",
   },
 });

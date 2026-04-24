@@ -3,32 +3,26 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "./api";
 
 // ⚠️ Palitan ng actual IP ng computer mo
-const BASE_URL = "http://192.168.1.105:5261";
+export const BASE_URL = "http://192.168.1.105:5261";
 
 // ══════════════════════════════════════════════════════════════════════
 //  TYPES
 // ══════════════════════════════════════════════════════════════════════
 
-export interface Message {
+export interface ChatMessage {
   id: number;
   content: string;
   isRead: boolean;
   sentAt: string;
   readAt?: string;
-
-  // Sender info
   senderId: number;
   senderUsername: string;
   senderFullName?: string;
   senderPicture?: string;
-
-  // Receiver info
   receiverId: number;
   receiverUsername: string;
   receiverFullName?: string;
   receiverPicture?: string;
-
-  // Helper flag – true kung ikaw ang nagpadala
   isMyMessage: boolean;
 }
 
@@ -44,84 +38,117 @@ export interface Conversation {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-//  REST API CALLS
+//  REST API
 // ══════════════════════════════════════════════════════════════════════
 
-// Kunin ang chat history kasama ang isang specific user
+// Kunin ang chat history ng dalawang user
 export const getConversation = async (
   otherUserId: number,
   page = 1,
-): Promise<Message[]> => {
+): Promise<ChatMessage[]> => {
   const res = await api.get(`/chat/conversation/${otherUserId}?page=${page}`);
   return res.data;
 };
 
-// Kunin ang lahat ng conversations (inbox)
+// Kunin ang inbox (lahat ng recent conversations)
 export const getConversations = async (): Promise<Conversation[]> => {
   const res = await api.get("/chat/conversations");
   return res.data;
 };
 
-// Kunin ang total unread count (para sa badge)
+// Total unread count para sa badge notification
 export const getUnreadCount = async (): Promise<number> => {
   const res = await api.get("/chat/unread");
   return res.data.unreadCount;
 };
 
 // Mark messages as read
-export const markAsRead = async (otherUserId: number): Promise<void> => {
+export const markMessagesAsRead = async (
+  otherUserId: number,
+): Promise<void> => {
   await api.put(`/chat/read/${otherUserId}`);
 };
 
 // ══════════════════════════════════════════════════════════════════════
-//  SIGNALR CONNECTION MANAGEMENT
+//  SIGNALR – SINGLETON CONNECTION
 // ══════════════════════════════════════════════════════════════════════
 
-// Singleton connection – isa lang ang connection sa buong app
+// Isa lang ang connection sa buong app (singleton pattern)
 let hubConnection: signalR.HubConnection | null = null;
 
-// ── BUILD AT START NG SIGNALR CONNECTION ───────────────────────────────
-export const startSignalRConnection =
-  async (): Promise<signalR.HubConnection> => {
-    // Kung connected na, ibalik ang existing connection
-    if (
-      hubConnection &&
-      hubConnection.state === signalR.HubConnectionState.Connected
-    ) {
+// I-start ang SignalR connection
+export const startChatConnection = async (): Promise<signalR.HubConnection> => {
+  // Kung connected o connecting na, wag nang gumawa ng bago
+  if (hubConnection) {
+    if (hubConnection.state === signalR.HubConnectionState.Connected) {
       return hubConnection;
     }
+    if (
+      hubConnection.state === signalR.HubConnectionState.Connecting ||
+      hubConnection.state === signalR.HubConnectionState.Reconnecting
+    ) {
+      console.log("⏳ SignalR is already connecting/reconnecting...");
+      return hubConnection;
+    }
+  }
 
-    // Kuhanin ang JWT token
-    const token = await AsyncStorage.getItem("token");
+  const token = await AsyncStorage.getItem("token");
 
-    // I-build ang connection
-    hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl(`${BASE_URL}/hubs/chat`, {
-        // JWT token bilang query param (kailangan ng SignalR)
-        accessTokenFactory: () => token ?? "",
-      })
-      // Auto-reconnect: 0s, 2s, 5s, 10s, 30s
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(signalR.LogLevel.Warning)
-      .build();
+  hubConnection = new signalR.HubConnectionBuilder()
+    .withUrl(`${BASE_URL}/hubs/chat`, {
+      accessTokenFactory: () => token ?? "",
+      // Force WebSockets pero papayagan ang fallback kung kailangan
+      skipNegotiation: false,
+      transport:
+        signalR.HttpTransportType.WebSockets |
+        signalR.HttpTransportType.LongPolling,
+    })
+    .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+    .configureLogging(signalR.LogLevel.Warning)
+    .build();
 
-    // I-start ang connection
+  // Error logging para malaman kung bakit nawawala ang connection
+  hubConnection.onclose((error) => {
+    console.error(
+      "🔌 SignalR Connection closed:",
+      error?.message || "Manual stop or unknown error",
+    );
+  });
+
+  hubConnection.onreconnecting((error) => {
+    console.warn("🔄 SignalR Reconnecting:", error?.message);
+  });
+
+  hubConnection.onreconnected((connectionId) => {
+    console.log("✅ SignalR Reconnected. ID:", connectionId);
+  });
+
+  try {
     await hubConnection.start();
-    console.log("✅ SignalR connected! State:", hubConnection.state);
-
-    return hubConnection;
-  };
-
-// ── STOP CONNECTION (kapag nag-logout) ────────────────────────────────
-export const stopSignalRConnection = async (): Promise<void> => {
-  if (hubConnection) {
-    await hubConnection.stop();
+    console.log("✅ SignalR connected!");
+  } catch (err) {
+    console.error("❌ SignalR Connection Error:", err);
+    // I-clear ang hubConnection para pwedeng subukan ulit mamaya
     hubConnection = null;
-    console.log("🔌 SignalR disconnected.");
+    throw err;
+  }
+
+  return hubConnection;
+};
+
+// I-stop ang connection (sa logout)
+export const stopChatConnection = async (): Promise<void> => {
+  if (hubConnection) {
+    try {
+      await hubConnection.stop();
+      hubConnection = null;
+      console.log("🔌 SignalR stopped.");
+    } catch (err) {
+      console.error("❌ Error stopping SignalR:", err);
+    }
   }
 };
 
-// ── GET CURRENT CONNECTION ─────────────────────────────────────────────
-export const getHubConnection = (): signalR.HubConnection | null => {
-  return hubConnection;
-};
+// Kunin ang current connection
+export const getChatConnection = (): signalR.HubConnection | null =>
+  hubConnection;

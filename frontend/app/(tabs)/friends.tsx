@@ -1,36 +1,42 @@
-﻿import React, { useCallback, useEffect, useState } from "react";
+﻿import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    View,
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Button,
-    Searchbar,
-    SegmentedButtons,
-    Surface,
-    Text,
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Divider,
+  IconButton,
+  Searchbar,
+  SegmentedButtons,
+  Surface,
+  Text,
 } from "react-native-paper";
+import { BASE_URL } from "../../services/chatService";
 import {
-    acceptFriendRequest,
-    Friend,
-    getFriends,
-    getPendingRequests,
-    rejectFriendRequest,
-    searchUsers,
-    sendFriendRequest,
-    unfriend,
+  acceptFriendRequest,
+  Friend,
+  getFriends,
+  getPendingRequests,
+  rejectFriendRequest,
+  searchUsers,
+  sendFriendRequest,
+  unfriend,
 } from "../../services/friendService";
 import { UserProfile } from "../../services/userService";
 
-const BASE_URL = "http://192.168.1.XXX:5000";
-
 export default function FriendsScreen() {
-  // Tab state: "friends" | "requests" | "search"
+  const router = useRouter();
+
+  // ── State ──────────────────────────────────────────────────────────
   const [tab, setTab] = useState("friends");
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<Friend[]>([]);
@@ -40,7 +46,11 @@ export default function FriendsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  // Load friends and pending requests
+  // ── Action Modal State ─────────────────────────────────────────────
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
+
+  // ── Load Data ──────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -48,7 +58,7 @@ export default function FriendsScreen() {
       setFriends(f);
       setRequests(r);
     } catch {
-      Alert.alert("Error", "Failed to load friends data.");
+      Alert.alert("Error", "Failed to load friends.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -59,10 +69,9 @@ export default function FriendsScreen() {
     loadData();
   }, []);
 
-  // Search users as user types (debounce effect)
+  // ── Search debounce ────────────────────────────────────────────────
   useEffect(() => {
     if (tab !== "search") return;
-
     const timer = setTimeout(async () => {
       if (searchQuery.length < 2) {
         setSearchResult([]);
@@ -70,49 +79,83 @@ export default function FriendsScreen() {
       }
       setSearching(true);
       try {
-        const results = await searchUsers(searchQuery);
-        setSearchResult(results);
+        const res = await searchUsers(searchQuery);
+        setSearchResult(res);
       } catch {
         Alert.alert("Error", "Search failed.");
       } finally {
         setSearching(false);
       }
-    }, 500); // Wait 500ms after user stops typing
-
+    }, 500);
     return () => clearTimeout(timer);
   }, [searchQuery, tab]);
 
-  // ── ACCEPT REQUEST ─────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════
+  //  MODAL ACTIONS
+  // ══════════════════════════════════════════════════════════════════
+
+  // Kapag na-tap ang isang friend – ipakita ang options modal
+  const handleFriendTap = (friend: Friend) => {
+    setSelectedFriend(friend);
+    setModalVisible(true);
+  };
+
+  // Option 1: View Profile
+  const handleViewProfile = () => {
+    if (!selectedFriend) return;
+    setModalVisible(false);
+    router.push({
+      pathname: "/(tabs)/view-profile",
+      params: { userId: selectedFriend.userId.toString() },
+    });
+  };
+
+  // Option 2: Message – diretso sa chat
+  const handleMessageFriend = () => {
+    if (!selectedFriend) return;
+    setModalVisible(false);
+
+    // I-navigate sa chat screen na may receiver info
+    router.push({
+      pathname: "/(tabs)/chat",
+      params: {
+        userId: selectedFriend.userId.toString(),
+        username: selectedFriend.username,
+        fullName: selectedFriend.fullName ?? selectedFriend.username,
+        picture: selectedFriend.profilePictureUrl ?? "",
+      },
+    });
+  };
+
+  // ── Accept / Reject / Unfriend ─────────────────────────────────────
   const handleAccept = async (friendshipId: number) => {
     try {
       await acceptFriendRequest(friendshipId);
-      Alert.alert("✅ Accepted!", "You are now friends!");
-      loadData(); // Refresh lists
+      Alert.alert("✅", "Friend request accepted!");
+      loadData();
     } catch {
-      Alert.alert("Error", "Failed to accept request.");
+      Alert.alert("Error", "Failed to accept.");
     }
   };
 
-  // ── REJECT REQUEST ─────────────────────────────────────────────────
   const handleReject = async (friendshipId: number) => {
     try {
       await rejectFriendRequest(friendshipId);
       loadData();
     } catch {
-      Alert.alert("Error", "Failed to reject request.");
+      Alert.alert("Error", "Failed to reject.");
     }
   };
 
-  // ── UNFRIEND ───────────────────────────────────────────────────────
-  const handleUnfriend = (friendshipId: number, name: string) => {
-    Alert.alert("Unfriend", `Remove ${name} from your friends?`, [
+  const handleUnfriend = (id: number, name: string) => {
+    Alert.alert("Unfriend", `Remove ${name}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Unfriend",
         style: "destructive",
         onPress: async () => {
           try {
-            await unfriend(friendshipId);
+            await unfriend(id);
             loadData();
           } catch {
             Alert.alert("Error", "Failed to unfriend.");
@@ -122,18 +165,16 @@ export default function FriendsScreen() {
     ]);
   };
 
-  // ── SEND FRIEND REQUEST (from search) ─────────────────────────────
   const handleSendRequest = async (userId: number, username: string) => {
     try {
-      const message = await sendFriendRequest(userId);
-      Alert.alert("✅ Sent!", message);
-    } catch (error: any) {
-      const msg = error.response?.data?.message || "Failed to send request.";
-      Alert.alert("Error", msg);
+      const msg = await sendFriendRequest(userId);
+      Alert.alert("✅", msg);
+    } catch (e: any) {
+      Alert.alert("Error", e.response?.data?.message ?? "Failed.");
     }
   };
 
-  // ── AVATAR HELPER ──────────────────────────────────────────────────
+  // ── Avatar helper ──────────────────────────────────────────────────
   const renderAvatar = (item: {
     profilePictureUrl?: string;
     username: string;
@@ -143,7 +184,6 @@ export default function FriendsScreen() {
       ? `${BASE_URL}${item.profilePictureUrl}`
       : null;
     const initials = (item.fullName ?? item.username)[0].toUpperCase();
-
     return uri ? (
       <Avatar.Image size={50} source={{ uri }} />
     ) : (
@@ -151,34 +191,55 @@ export default function FriendsScreen() {
     );
   };
 
-  // ── RENDER: FRIENDS LIST ───────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════
+  //  RENDER ITEMS
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── FRIEND CARD – tap to show options ─────────────────────────────
   const renderFriend = ({ item }: { item: Friend }) => (
-    <Surface style={styles.card} elevation={1}>
-      <View style={styles.cardRow}>
-        {renderAvatar(item)}
-        <View style={styles.cardInfo}>
-          <Text variant="titleMedium" style={styles.name}>
-            {item.fullName ?? item.username}
-          </Text>
-          <Text variant="bodySmall" style={styles.username}>
-            @{item.username}
-          </Text>
+    <TouchableOpacity activeOpacity={0.7} onPress={() => handleFriendTap(item)}>
+      <Surface style={styles.card} elevation={1}>
+        <View style={styles.cardRow}>
+          {renderAvatar(item)}
+          <View style={styles.cardInfo}>
+            <Text variant="titleMedium" style={styles.name}>
+              {item.fullName ?? item.username}
+            </Text>
+            <Text variant="bodySmall" style={styles.username}>
+              @{item.username}
+            </Text>
+            {/* Hint text */}
+            <Text variant="bodySmall" style={styles.tapHint}>
+              Tap for options
+            </Text>
+          </View>
+
+          {/* Quick action icons */}
+          <View style={styles.quickIcons}>
+            {/* Message icon */}
+            <IconButton
+              icon="message-outline"
+              size={22}
+              iconColor="#6200ee"
+              onPress={() => {
+                setSelectedFriend(item);
+                handleMessageFriend();
+              }}
+            />
+            {/* More options */}
+            <IconButton
+              icon="dots-vertical"
+              size={22}
+              iconColor="#888"
+              onPress={() => handleFriendTap(item)}
+            />
+          </View>
         </View>
-        <Button
-          mode="outlined"
-          compact
-          textColor="red"
-          onPress={() =>
-            handleUnfriend(item.friendshipId, item.fullName ?? item.username)
-          }
-        >
-          Unfriend
-        </Button>
-      </View>
-    </Surface>
+      </Surface>
+    </TouchableOpacity>
   );
 
-  // ── RENDER: PENDING REQUESTS ───────────────────────────────────────
+  // ── REQUEST CARD ───────────────────────────────────────────────────
   const renderRequest = ({ item }: { item: Friend }) => (
     <Surface style={styles.card} elevation={1}>
       <View style={styles.cardRow}>
@@ -192,7 +253,6 @@ export default function FriendsScreen() {
           </Text>
         </View>
       </View>
-      {/* Accept / Reject buttons */}
       <View style={styles.requestActions}>
         <Button
           mode="contained"
@@ -215,36 +275,74 @@ export default function FriendsScreen() {
     </Surface>
   );
 
-  // ── RENDER: SEARCH RESULTS ─────────────────────────────────────────
+  // ── SEARCH RESULT CARD ─────────────────────────────────────────────
   const renderSearchResult = ({ item }: { item: UserProfile }) => (
     <Surface style={styles.card} elevation={1}>
-      <View style={styles.cardRow}>
-        {renderAvatar(item)}
-        <View style={styles.cardInfo}>
-          <Text variant="titleMedium" style={styles.name}>
-            {item.fullName ?? item.username}
-          </Text>
-          <Text variant="bodySmall" style={styles.username}>
-            @{item.username}
-          </Text>
-          {item.bio ? (
-            <Text variant="bodySmall" numberOfLines={1} style={styles.bio}>
-              {item.bio}
+      <TouchableOpacity
+        onPress={() =>
+          router.push({
+            pathname: "/(tabs)/view-profile",
+            params: { userId: item.id.toString() },
+          })
+        }
+        activeOpacity={0.8}
+      >
+        <View style={styles.cardRow}>
+          {renderAvatar(item)}
+          <View style={styles.cardInfo}>
+            <Text variant="titleMedium" style={styles.name}>
+              {item.fullName ?? item.username}
             </Text>
-          ) : null}
+            <Text variant="bodySmall" style={styles.username}>
+              @{item.username}
+            </Text>
+            {item.bio ? (
+              <Text variant="bodySmall" numberOfLines={1} style={styles.bio}>
+                {item.bio}
+              </Text>
+            ) : null}
+          </View>
         </View>
+      </TouchableOpacity>
+
+      {/* Action buttons */}
+      <View style={styles.searchActions}>
+        <Button
+          mode="outlined"
+          icon="message-outline"
+          compact
+          style={styles.searchBtn}
+          textColor="#6200ee"
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/chat",
+              params: {
+                userId: item.id.toString(),
+                username: item.username,
+                fullName: item.fullName ?? item.username,
+                picture: item.profilePictureUrl ?? "",
+              },
+            })
+          }
+        >
+          Message
+        </Button>
         <Button
           mode="contained"
           compact
           icon="account-plus"
+          style={styles.searchBtn}
           onPress={() => handleSendRequest(item.id, item.username)}
         >
-          Add
+          Add Friend
         </Button>
       </View>
     </Surface>
   );
 
+  // ══════════════════════════════════════════════════════════════════
+  //  MAIN RENDER
+  // ══════════════════════════════════════════════════════════════════
   return (
     <View style={styles.container}>
       {/* ── TAB SWITCHER ── */}
@@ -260,7 +358,10 @@ export default function FriendsScreen() {
           },
           {
             value: "requests",
-            label: `Requests${requests.length > 0 ? ` (${requests.length})` : ""}`,
+            label:
+              requests.length > 0
+                ? `Requests (${requests.length})`
+                : "Requests",
             icon: "account-clock",
           },
           {
@@ -271,7 +372,7 @@ export default function FriendsScreen() {
         ]}
       />
 
-      {/* ── SEARCH BAR (only for Search tab) ── */}
+      {/* ── SEARCH BAR ── */}
       {tab === "search" && (
         <Searchbar
           placeholder="Search by username or name..."
@@ -282,7 +383,7 @@ export default function FriendsScreen() {
         />
       )}
 
-      {/* ── LOADING INDICATOR ── */}
+      {/* ── LOADING ── */}
       {loading && (
         <View style={styles.centered}>
           <ActivityIndicator size="large" />
@@ -293,7 +394,7 @@ export default function FriendsScreen() {
       {tab === "friends" && !loading && (
         <FlatList
           data={friends}
-          keyExtractor={(item) => item.friendshipId.toString()}
+          keyExtractor={(i) => i.friendshipId.toString()}
           renderItem={renderFriend}
           refreshControl={
             <RefreshControl
@@ -304,14 +405,15 @@ export default function FriendsScreen() {
               }}
             />
           }
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          contentContainerStyle={
+            friends.length === 0 ? { flex: 1 } : { padding: 12 }
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>👥</Text>
               <Text variant="titleMedium" style={styles.emptyText}>
                 No friends yet
-              </Text>
-              <Text variant="bodySmall" style={styles.emptySubtext}>
-                Search for people to add as friends!
               </Text>
               <Button
                 mode="contained"
@@ -323,10 +425,6 @@ export default function FriendsScreen() {
               </Button>
             </View>
           }
-          contentContainerStyle={
-            friends.length === 0 ? { flex: 1 } : { padding: 12 }
-          }
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         />
       )}
 
@@ -334,7 +432,7 @@ export default function FriendsScreen() {
       {tab === "requests" && !loading && (
         <FlatList
           data={requests}
-          keyExtractor={(item) => item.friendshipId.toString()}
+          keyExtractor={(i) => i.friendshipId.toString()}
           renderItem={renderRequest}
           refreshControl={
             <RefreshControl
@@ -345,21 +443,18 @@ export default function FriendsScreen() {
               }}
             />
           }
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          contentContainerStyle={
+            requests.length === 0 ? { flex: 1 } : { padding: 12 }
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>📭</Text>
               <Text variant="titleMedium" style={styles.emptyText}>
                 No pending requests
               </Text>
-              <Text variant="bodySmall" style={styles.emptySubtext}>
-                When someone sends you a friend request, it will appear here.
-              </Text>
             </View>
           }
-          contentContainerStyle={
-            requests.length === 0 ? { flex: 1 } : { padding: 12 }
-          }
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         />
       )}
 
@@ -367,32 +462,161 @@ export default function FriendsScreen() {
       {tab === "search" && !loading && (
         <FlatList
           data={searchResult}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(i) => i.id.toString()}
           renderItem={renderSearchResult}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          contentContainerStyle={
+            searchResult.length === 0 ? { flex: 1 } : { padding: 12 }
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>🔍</Text>
               <Text variant="titleMedium" style={styles.emptyText}>
                 {searchQuery.length < 2
-                  ? "Type at least 2 characters to search"
+                  ? "Type 2+ characters to search"
                   : "No users found"}
               </Text>
             </View>
           }
-          contentContainerStyle={
-            searchResult.length === 0 ? { flex: 1 } : { padding: 12 }
-          }
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         />
       )}
+
+      {/* ══════════════════════════════════════════════════════════════
+           ACTION MODAL – kapag nag-tap ng friend
+         ══════════════════════════════════════════════════════════════ */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        {/* Backdrop – tap to close */}
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setModalVisible(false)}
+        />
+
+        {/* Modal content */}
+        <View style={styles.modalSheet}>
+          {selectedFriend && (
+            <>
+              {/* Friend info header */}
+              <View style={styles.modalHeader}>
+                {renderAvatar(selectedFriend)}
+                <View style={{ marginLeft: 12 }}>
+                  <Text variant="titleMedium" style={styles.modalName}>
+                    {selectedFriend.fullName ?? selectedFriend.username}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.modalUsername}>
+                    @{selectedFriend.username}
+                  </Text>
+                </View>
+              </View>
+
+              <Divider style={{ marginBottom: 12 }} />
+
+              {/* Option 1: View Profile */}
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={handleViewProfile}
+              >
+                <View style={styles.modalOptionIcon}>
+                  <Text style={styles.modalOptionEmoji}>👤</Text>
+                </View>
+                <View>
+                  <Text variant="titleSmall" style={styles.modalOptionTitle}>
+                    View Profile
+                  </Text>
+                  <Text variant="bodySmall" style={styles.modalOptionSub}>
+                    See {selectedFriend.username}'s profile and posts
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Option 2: Message */}
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={handleMessageFriend}
+              >
+                <View
+                  style={[
+                    styles.modalOptionIcon,
+                    { backgroundColor: "#f0e8ff" },
+                  ]}
+                >
+                  <Text style={styles.modalOptionEmoji}>💬</Text>
+                </View>
+                <View>
+                  <Text variant="titleSmall" style={styles.modalOptionTitle}>
+                    Send Message
+                  </Text>
+                  <Text variant="bodySmall" style={styles.modalOptionSub}>
+                    Start a private conversation
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Option 3: Unfriend */}
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => {
+                  setModalVisible(false);
+                  handleUnfriend(
+                    selectedFriend.friendshipId,
+                    selectedFriend.fullName ?? selectedFriend.username,
+                  );
+                }}
+              >
+                <View
+                  style={[
+                    styles.modalOptionIcon,
+                    { backgroundColor: "#fff0f0" },
+                  ]}
+                >
+                  <Text style={styles.modalOptionEmoji}>❌</Text>
+                </View>
+                <View>
+                  <Text
+                    variant="titleSmall"
+                    style={[styles.modalOptionTitle, { color: "#e74c3c" }]}
+                  >
+                    Unfriend
+                  </Text>
+                  <Text variant="bodySmall" style={styles.modalOptionSub}>
+                    Remove from friends list
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Cancel button */}
+              <Button
+                mode="outlined"
+                onPress={() => setModalVisible(false)}
+                style={styles.cancelBtn}
+              >
+                Cancel
+              </Button>
+            </>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════
+//  STYLES
+// ══════════════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f0f2f5",
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   tabs: {
     margin: 12,
@@ -402,11 +626,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 12,
   },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+
+  // ── CARDS ─────────────────────────────────────────────────────────
   card: {
     borderRadius: 12,
     padding: 12,
@@ -431,6 +652,17 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 2,
   },
+  tapHint: {
+    color: "#bbb",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  quickIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  // ── REQUEST ACTIONS ───────────────────────────────────────────────
   requestActions: {
     flexDirection: "row",
     marginTop: 10,
@@ -442,6 +674,22 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 8,
   },
+
+  // ── SEARCH ACTIONS ────────────────────────────────────────────────
+  searchActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  searchBtn: {
+    flex: 1,
+    borderRadius: 8,
+  },
+
+  // ── EMPTY STATE ───────────────────────────────────────────────────
   emptyContainer: {
     flex: 1,
     alignItems: "center",
@@ -457,9 +705,61 @@ const styles = StyleSheet.create({
     color: "#1a1a2e",
     textAlign: "center",
   },
-  emptySubtext: {
+
+  // ── ACTION MODAL ──────────────────────────────────────────────────
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalSheet: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+    gap: 4,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalName: {
+    fontWeight: "bold",
+    color: "#1a1a2e",
+  },
+  modalUsername: {
     color: "#888",
-    textAlign: "center",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    gap: 14,
+  },
+  modalOptionIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#f0f4ff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalOptionEmoji: {
+    fontSize: 22,
+  },
+  modalOptionTitle: {
+    fontWeight: "600",
+    color: "#1a1a2e",
+  },
+  modalOptionSub: {
+    color: "#888",
+    marginTop: 2,
+  },
+  cancelBtn: {
     marginTop: 8,
+    borderRadius: 12,
   },
 });

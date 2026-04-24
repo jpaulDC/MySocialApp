@@ -1,4 +1,4 @@
-namespace SocialApp.API.Models
+namespace SocialAppAPI.Models
 {
     // Represents a chat message between two users
     public class Message

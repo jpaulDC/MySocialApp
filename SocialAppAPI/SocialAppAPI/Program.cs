@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using SocialAppAPI.Hubs;      // Siguraduhin na tama ang namespace ng Hub mo
+using SocialAppAPI.Hubs;
 using SocialAppAPI.Data;
 using SocialAppAPI.Services;
 using Microsoft.OpenApi.Models;
@@ -17,55 +17,65 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtIssuer,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-        };
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtIssuer,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        ClockSkew = TimeSpan.Zero // Inaalis ang default 5-minute grace period para sa expiry
+    };
 
-        options.Events = new JwtBearerEvents
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
         {
-            OnMessageReceived = context =>
+            // Kinukuha ang token mula sa query string para sa SignalR
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            if (!string.IsNullOrEmpty(accessToken) &&
+                path.StartsWithSegments("/hubs/chat"))
             {
-                // Kinukuha ang token mula sa query string
-                // Kasi hindi kayang mag-send ng headers ang SignalR WebSocket
-                var accessToken = context.Request.Query["access_token"];
-                var path = context.HttpContext.Request.Path;
-
-                if (!string.IsNullOrEmpty(accessToken) &&
-                    path.StartsWithSegments("/hubs/chat"))
-                {
-                    context.Token = accessToken;
-                }
-                return Task.CompletedTask;
+                context.Token = accessToken;
             }
-        };
-    });
+            return Task.CompletedTask;
+        }
+    };
+});
 
 builder.Services.AddAuthorization();
 
-// 3. SERVICES (Pinagsama ang luma at bago)
+// 3. SERVICES
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<FriendService>();
 builder.Services.AddScoped<PostService>();
 builder.Services.AddScoped<LikeCommentService>();
 builder.Services.AddScoped<ReelService>();
-builder.Services.AddScoped<ChatService>();           // ← BAGO: Para sa Chat logic
-builder.Services.AddSignalR();                       // ← BAGO: Enable SignalR
+builder.Services.AddScoped<ChatService>();
+
+// Enable SignalR with detailed errors for debugging
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// SWAGGER CONFIG (Nandito lahat ng Security Definitions mo)
+// SWAGGER CONFIG
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "SocialApp API", Version = "v1" });
@@ -77,7 +87,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Bear your JWT token sa text box."
+        Description = "Ilagay ang JWT token dito."
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -85,47 +95,51 @@ builder.Services.AddSwaggerGen(options =>
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
             new string[] {}
         }
     });
 });
 
-// 4. CORS POLICY
+// 4. CORS POLICY (Pinatibay para sa SignalR)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
-        policy
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials() // ← MAHALAGA: Kailangan ito para sa SignalR
-            .SetIsOriginAllowed(_ => true)); // Mas safe ito para sa mobile testing
+    {
+        policy.SetIsOriginAllowed(_ => true) // Pinapalitan ng SetIsOriginAllowed para dynamic
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials(); // REQUIRED para sa SignalR
+    });
 });
 
 var app = builder.Build();
 
 // 5. SWAGGER UI
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SocialApp API V1");
-    c.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SocialApp API V1");
+        c.RoutePrefix = "swagger";
+    });
+}
 
 // 6. MIDDLEWARE PIPELINE
 app.UseStaticFiles();
+
+// MAHALAGA: Dapat mauna ang UseCors bago ang Authentication/Authorization
 app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
-// ── BAGO: MAP SIGNALR HUB ────────────────────────────────────────────────────
+// 7. MAP SIGNALR HUB
 app.MapHub<ChatHub>("/hubs/chat");
 
-// 7. RUN WITH YOUR CUSTOM IP/PORT
+// 8. RUN WITH CUSTOM IP/PORT
 app.Run("http://0.0.0.0:5261");
