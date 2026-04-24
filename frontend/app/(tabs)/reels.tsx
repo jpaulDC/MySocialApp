@@ -26,7 +26,7 @@ import {
 } from "react-native-paper";
 import {
   addReelComment,
-  deleteReel, // Siguraduhing ang deleteReel sa reelService ay tama ang API endpoint
+  deleteReel,
   getReelComments,
   getReels,
   Reel,
@@ -69,6 +69,7 @@ export default function ReelsScreen() {
   const [submittingCmt, setSubmittingCmt] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
+  const commentsFlatListRef = useRef<FlatList>(null); // Ref para sa auto-scroll
 
   useEffect(() => {
     const loadUser = async () => {
@@ -108,6 +109,7 @@ export default function ReelsScreen() {
   };
 
   const handleLike = async (reelId: number) => {
+    const originalReels = [...reels];
     setReels((prev) =>
       prev.map((r) => {
         if (r.id !== reelId) return r;
@@ -120,16 +122,9 @@ export default function ReelsScreen() {
       }),
     );
     try {
-      const res = await toggleReelLike(reelId);
-      setReels((prev) =>
-        prev.map((r) =>
-          r.id === reelId
-            ? { ...r, isLikedByMe: res.isLiked, likeCount: res.likeCount }
-            : r,
-        ),
-      );
-    } catch {
-      loadReels(1, true);
+      await toggleReelLike(reelId);
+    } catch (error) {
+      setReels(originalReels);
     }
   };
 
@@ -150,25 +145,40 @@ export default function ReelsScreen() {
   const handleSubmitComment = async () => {
     if (!commentText.trim() || !activeReelId) return;
     setSubmittingCmt(true);
+
     try {
-      const c = await addReelComment(activeReelId, commentText.trim());
-      setComments((prev) => [...prev, c]);
-      setCommentText("");
-      setReels((prev) =>
-        prev.map((r) =>
-          r.id === activeReelId
-            ? { ...r, commentCount: r.commentCount + 1 }
-            : r,
-        ),
-      );
-    } catch {
+      const newCmt = await addReelComment(activeReelId, commentText.trim());
+      if (newCmt) {
+        // 1. Clear input agad para hindi "stock"
+        setCommentText("");
+
+        // 2. I-update ang listahan ng comments (ilagay sa taas)
+        setComments((prev) => [newCmt, ...prev]);
+
+        // 3. I-update ang reel count sa main list
+        setReels((prev) =>
+          prev.map((r) =>
+            r.id === activeReelId
+              ? { ...r, commentCount: (r.commentCount || 0) + 1 }
+              : r,
+          ),
+        );
+
+        // 4. Auto-scroll pataas para makita yung comment
+        setTimeout(() => {
+          commentsFlatListRef.current?.scrollToOffset({
+            offset: 0,
+            animated: true,
+          });
+        }, 150);
+      }
+    } catch (err) {
       Alert.alert("Error", "Failed to post comment.");
     } finally {
       setSubmittingCmt(false);
     }
   };
 
-  // ── FIXED DELETE LOGIC ──
   const handleDeleteReel = (reelId: number) => {
     Alert.alert("Delete Reel", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
@@ -176,24 +186,26 @@ export default function ReelsScreen() {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
-          // 1. Itago muna natin ang reels para tumigil ang Video Player
-          const deletedReel = reels.find((r) => r.id === reelId);
           setReels((prev) => prev.filter((r) => r.id !== reelId));
-
           try {
             await deleteReel(reelId);
           } catch (error: any) {
-            // 2. Kung nag-error sa backend (tulad ng IOException na 'yan),
-            // ibalik natin sa listahan para malaman ng user na failed.
-            console.log("Server error, but UI updated:", error.message);
-
-            // Opsyonal: I-alert lang kung gusto mong malaman na may lock ang file
-            // Alert.alert("Server Busy", "File is currently in use. Try again in a few seconds.");
-            // if (deletedReel) setReels(prev => [...prev, deletedReel]);
+            console.log("Server error", error.message);
           }
         },
       },
     ]);
+  };
+
+  const handleViewProfile = (userId: number) => {
+    if (userId === myUserId) {
+      router.push("/(tabs)/profile");
+    } else {
+      router.push({
+        pathname: "/(tabs)/view-profile",
+        params: { userId: userId },
+      });
+    }
   };
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
@@ -212,11 +224,13 @@ export default function ReelsScreen() {
     const avatarUri = item.profilePicture
       ? `${BASE_URL}${item.profilePicture}`
       : null;
-    const initials = (item.fullName ?? item.username)[0].toUpperCase();
+    const displayName = item.fullName ?? item.username ?? "User";
 
     return (
-      <View style={[styles.reelContainer, { height: SCREEN_H }]}>
-        {/* VIDEO SECTION */}
+      <View
+        key={`reel-${item.id}-${item.commentCount}-${item.isLikedByMe}`}
+        style={[styles.reelContainer, { height: SCREEN_H }]}
+      >
         <TouchableWithoutFeedback onPress={togglePlayPause}>
           <View style={StyleSheet.absoluteFill}>
             <Video
@@ -239,7 +253,6 @@ export default function ReelsScreen() {
           </View>
         </TouchableWithoutFeedback>
 
-        {/* INTERFACE OVERLAY */}
         <View style={styles.overlay} pointerEvents="box-none">
           <View style={styles.topRow}>
             <Text style={styles.reelsLabel}>Reels</Text>
@@ -247,13 +260,12 @@ export default function ReelsScreen() {
               <IconButton
                 icon="delete-outline"
                 size={26}
-                iconColor="#FF4B4B" // Kulay Red para sa delete
+                iconColor="#FF4B4B"
                 onPress={() => handleDeleteReel(item.id)}
               />
             )}
           </View>
 
-          {/* SIDE ACTIONS */}
           <View style={[styles.rightActions, { bottom: tabBarHeight + 180 }]}>
             <TouchableOpacity
               style={styles.actionItem}
@@ -266,7 +278,6 @@ export default function ReelsScreen() {
               />
               <Text style={styles.actionCount}>{item.likeCount}</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.actionItem}
               onPress={() => openComments(item.id)}
@@ -274,32 +285,31 @@ export default function ReelsScreen() {
               <IconButton icon="comment-outline" size={35} iconColor="white" />
               <Text style={styles.actionCount}>{item.commentCount}</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.actionItem}>
               <IconButton icon="share-outline" size={35} iconColor="white" />
               <Text style={styles.actionCount}>Share</Text>
             </TouchableOpacity>
           </View>
 
-          {/* BOTTOM INFO */}
           <View
             style={[styles.bottomInfo, { paddingBottom: tabBarHeight + 20 }]}
           >
-            <View style={styles.authorRow}>
+            <TouchableOpacity
+              style={styles.authorRow}
+              onPress={() => handleViewProfile(item.userId)}
+            >
               {avatarUri ? (
                 <Avatar.Image size={38} source={{ uri: avatarUri }} />
               ) : (
-                <Avatar.Text size={38} label={initials} />
+                <Avatar.Text size={38} label={displayName[0].toUpperCase()} />
               )}
               <View style={{ marginLeft: 10 }}>
-                <Text style={styles.authorName}>
-                  {item.fullName ?? item.username}
-                </Text>
+                <Text style={styles.authorName}>{displayName}</Text>
                 <Text style={styles.authorUsername}>
                   @{item.username} · {timeAgo(item.createdAt)}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
             {item.caption && (
               <Text style={styles.caption} numberOfLines={2}>
                 {item.caption}
@@ -325,22 +335,21 @@ export default function ReelsScreen() {
       <FlatList
         ref={flatListRef}
         data={reels}
-        keyExtractor={(item) => item.id.toString()}
+        extraData={reels}
+        keyExtractor={(item) =>
+          `${item.id}-${item.commentCount}-${item.isLikedByMe}`
+        }
         renderItem={renderReel}
         pagingEnabled
         snapToInterval={SCREEN_H}
         snapToAlignment="start"
-        snapToOffsets={reels.map((_, i) => i * SCREEN_H)}
         decelerationRate="fast"
         disableIntervalMomentum
         showsVerticalScrollIndicator={false}
         viewabilityConfig={viewabilityConfig}
         onViewableItemsChanged={onViewableItemsChanged}
         onEndReached={() => {
-          if (!hasMore) return;
-          const next = page + 1;
-          setPage(next);
-          loadReels(next);
+          if (hasMore) loadReels(page + 1);
         }}
         onEndReachedThreshold={0.3}
       />
@@ -352,7 +361,6 @@ export default function ReelsScreen() {
         <IconButton icon="plus" size={30} iconColor="white" />
       </TouchableOpacity>
 
-      {/* COMMENTS MODAL */}
       <Modal
         visible={showComments}
         animationType="slide"
@@ -380,9 +388,9 @@ export default function ReelsScreen() {
               </View>
             ) : (
               <FlatList
+                ref={commentsFlatListRef}
                 data={comments}
                 keyExtractor={(c) => c.id.toString()}
-                style={{ flex: 1 }}
                 contentContainerStyle={{ padding: 12, gap: 12 }}
                 renderItem={({ item: c }) => (
                   <View style={styles.cmtRow}>
@@ -470,17 +478,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 52,
   },
-  reelsLabel: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 20,
-    textShadowRadius: 4,
-  },
+  reelsLabel: { color: "white", fontWeight: "bold", fontSize: 20 },
   bottomInfo: { paddingHorizontal: 16 },
   authorRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   authorName: { color: "white", fontWeight: "bold", fontSize: 16 },
   authorUsername: { color: "rgba(255,255,255,0.75)", fontSize: 13 },
-  caption: { color: "white", fontSize: 14, textShadowRadius: 4 },
+  caption: { color: "white", fontSize: 14 },
   rightActions: {
     position: "absolute",
     right: 12,

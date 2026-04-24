@@ -13,6 +13,7 @@ export interface ChatMessage {
   id: number;
   content: string;
   isRead: boolean;
+  isDelivered: boolean;
   sentAt: string;
   readAt?: string;
   senderId: number;
@@ -35,6 +36,20 @@ export interface Conversation {
   lastMessageTime: string;
   unreadCount: number;
   isLastMessageMine: boolean;
+}
+
+// Payload ng MessageDelivered event
+export interface DeliveredPayload {
+  messageId: number;
+  receiverId: number;
+  deliveredAt: string;
+}
+
+// Payload ng MessagesSeen event
+export interface SeenPayload {
+  seenBy: number;
+  messageIds: number[];
+  seenAt: string;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -78,26 +93,26 @@ let hubConnection: signalR.HubConnection | null = null;
 
 // I-start ang SignalR connection
 export const startChatConnection = async (): Promise<signalR.HubConnection> => {
-  // Kung connected o connecting na, wag nang gumawa ng bago
+  // ── FIX PARA SA ACCOUNT SWITCHING ──────────────────────────────────
   if (hubConnection) {
-    if (hubConnection.state === signalR.HubConnectionState.Connected) {
-      return hubConnection;
+    try {
+      // Pinapatay ang lumang connection (Manual stop)
+      await hubConnection.stop();
+    } catch (e) {
+      console.log("Cleaning up old connection...");
     }
-    if (
-      hubConnection.state === signalR.HubConnectionState.Connecting ||
-      hubConnection.state === signalR.HubConnectionState.Reconnecting
-    ) {
-      console.log("⏳ SignalR is already connecting/reconnecting...");
-      return hubConnection;
-    }
+    hubConnection = null;
   }
+  // ──────────────────────────────────────────────────────────────────
 
   const token = await AsyncStorage.getItem("token");
 
   hubConnection = new signalR.HubConnectionBuilder()
     .withUrl(`${BASE_URL}/hubs/chat`, {
-      accessTokenFactory: () => token ?? "",
-      // Force WebSockets pero papayagan ang fallback kung kailangan
+      accessTokenFactory: async () => {
+        const freshToken = await AsyncStorage.getItem("token");
+        return freshToken ?? "";
+      },
       skipNegotiation: false,
       transport:
         signalR.HttpTransportType.WebSockets |
@@ -107,11 +122,12 @@ export const startChatConnection = async (): Promise<signalR.HubConnection> => {
     .configureLogging(signalR.LogLevel.Warning)
     .build();
 
-  // Error logging para malaman kung bakit nawawala ang connection
+  // ── BINAGO: Ginawang console.log para hindi mag-Red Screen Error ──
   hubConnection.onclose((error) => {
-    console.error(
-      "🔌 SignalR Connection closed:",
-      error?.message || "Manual stop or unknown error",
+    // Imbes na console.error, console.log lang para tahimik ang app
+    console.log(
+      "🔌 SignalR Connection info:",
+      error?.message || "Manual stop for account switching",
     );
   });
 
@@ -128,7 +144,6 @@ export const startChatConnection = async (): Promise<signalR.HubConnection> => {
     console.log("✅ SignalR connected!");
   } catch (err) {
     console.error("❌ SignalR Connection Error:", err);
-    // I-clear ang hubConnection para pwedeng subukan ulit mamaya
     hubConnection = null;
     throw err;
   }

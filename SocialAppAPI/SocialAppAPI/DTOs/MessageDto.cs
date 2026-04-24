@@ -6,6 +6,7 @@ namespace SocialAppAPI.DTOs
         public int Id { get; set; }
         public string Content { get; set; } = string.Empty;
         public bool IsRead { get; set; }
+        public bool IsDelivered { get; set; }
         public DateTime SentAt { get; set; }
         public DateTime? ReadAt { get; set; }
 

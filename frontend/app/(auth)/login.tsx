@@ -36,6 +36,7 @@ export default function LoginScreen() {
       const { token } = response.data;
 
       if (token) {
+        await AsyncStorage.clear();
         await AsyncStorage.setItem("token", token);
         router.replace("/");
       } else {

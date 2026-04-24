@@ -17,7 +17,7 @@ namespace SocialAppAPI.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.0")
+                .HasAnnotation("ProductVersion", "8.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -123,6 +123,9 @@ namespace SocialAppAPI.Migrations
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsDelivered")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("boolean");

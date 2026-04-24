@@ -1,65 +1,74 @@
-﻿import api from './api';
+﻿import api from "./api";
 
 // TypeScript type para sa Post
 export interface Post {
-    id: number;
-    content?: string;
-    imageUrl?: string;
-    videoUrl?: string;
-    type: string;        // "Text" | "Image" | "Video"
-    userId: number;
-    username: string;
-    fullName?: string;
-    profilePicture?: string;
-    likeCount: number;
-    commentCount: number;
-    isLikedByMe: boolean;
-    createdAt: string;
+  id: number;
+  content?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  type: string; // "Text" | "Image" | "Video"
+  userId: number;
+  username: string;
+  fullName?: string;
+  profilePicture?: string;
+  likeCount: number;
+  commentCount: number;
+  isLikedByMe: boolean;
+  createdAt: string;
 }
 
 // ── CREATE POST ────────────────────────────────────────────────────────
 export const createPost = async (
-    content?: string,
-    imageUri?: string
+  content?: string,
+  imageUri?: string,
 ): Promise<Post> => {
-    const formData = new FormData();
+  const formData = new FormData();
 
-    if (content) formData.append('content', content);
+  if (content) formData.append("content", content);
 
-    // Attach image if provided
-    if (imageUri) {
-        formData.append('image', {
-            uri: imageUri,
-            type: 'image/jpeg',
-            name: 'post.jpg',
-        } as any);
-    }
+  // Attach image if provided
+  if (imageUri) {
+    formData.append("image", {
+      uri: imageUri,
+      type: "image/jpeg",
+      name: "post.jpg",
+    } as any);
+  }
 
-    const res = await api.post('/post', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
+  const res = await api.post("/post", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 
-    return res.data.post;
+  return res.data.post;
 };
 
 // ── GET FEED ───────────────────────────────────────────────────────────
 export const getFeed = async (page: number = 1): Promise<Post[]> => {
-    const res = await api.get(`/post/feed?page=${page}`);
-    return res.data;
+  const res = await api.get(`/post/feed?page=${page}`);
+  return res.data;
 };
 
+// ── GET POST BY ID ─────────────────────────────────────────────────────
 export const getPostById = async (id: number): Promise<Post> => {
-    const response = await api.get(`/post/${id}`);
-    return response.data;
+  const response = await api.get(`/post/${id}`);
+  return response.data;
 };
 
 // ── GET USER POSTS ─────────────────────────────────────────────────────
 export const getUserPosts = async (userId: number): Promise<Post[]> => {
-    const res = await api.get(`/post/user/${userId}`);
-    return res.data;
+  const res = await api.get(`/post/user/${userId}`);
+  return res.data;
 };
 
 // ── DELETE POST ────────────────────────────────────────────────────────
 export const deletePost = async (postId: number): Promise<void> => {
-    await api.delete(`/post/${postId}`);
+  await api.delete(`/post/${postId}`);
+};
+
+// ── LIKE / UNLIKE POST (FIXED: Idinagdag para mawala ang Red Line Error) ──
+export const likePost = async (
+  postId: number,
+): Promise<{ isLiked: boolean; likeCount: number }> => {
+  const res = await api.post(`/post/${postId}/like`);
+  return res.data;
 };

@@ -1,5 +1,6 @@
 import * as signalR from "@microsoft/signalr";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { jwtDecode } from "jwt-decode";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -20,15 +21,18 @@ import {
   Text,
 } from "react-native-paper";
 
-// INAYOS NA IMPORTS
+// SERVICES IMPORTS
 import {
+  BASE_URL,
+  ChatMessage,
+  DeliveredPayload,
+  getChatConnection,
   getConversation,
-  markMessagesAsRead,
-  ChatMessage as Message,
+  SeenPayload,
   startChatConnection,
 } from "../../services/chatService";
 
-// THEME COLORS (Match sa Home Screen mo)
+// THEME COLORS (Pinanatili ang iyong Dark Theme)
 const THEME = {
   bg: "#0A0A0A",
   surface: "#1E293B",
@@ -40,6 +44,7 @@ const THEME = {
   online: "#00FF94",
 };
 
+// HELPERS
 function formatTime(dateStr: string): string {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleTimeString([], {
@@ -62,11 +67,14 @@ export default function ChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  // Params mula sa navigation
   const receiverId = params.userId ? Number(params.userId) : null;
   const receiverName =
     (params.fullName as string) || (params.username as string) || "User";
+  const receiverPic = params.picture as string;
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  // STATE
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -74,11 +82,13 @@ export default function ChatScreen() {
   const [isOnline, setIsOnline] = useState(false);
   const [myUserId, setMyUserId] = useState<number | null>(null);
   const [conn, setConn] = useState<signalR.HubConnection | null>(null);
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
 
+  // 1. Get Current User ID
   useEffect(() => {
     const loadUserId = async () => {
       try {
@@ -98,58 +108,116 @@ export default function ChatScreen() {
     loadUserId();
   }, []);
 
+  // 2. Setup Chat & SignalR
   useEffect(() => {
-    if (!myUserId || !receiverId) {
-      if (!receiverId) setLoading(false);
-      return;
-    }
-
-    let activeConn: signalR.HubConnection | null = null;
+    if (!myUserId || !receiverId) return;
 
     const setupChat = async () => {
       try {
         const history = await getConversation(receiverId);
         setMessages(history);
-        await markMessagesAsRead(receiverId);
 
         const connection = await startChatConnection();
-        activeConn = connection;
         setConn(connection);
 
-        connection.off("ReceivePrivateMessage");
-        connection.off("UserTyping");
-        connection.off("UserStoppedTyping");
-        connection.off("OnlineStatus");
+        const currentReceiverId = Number(receiverId);
+        const currentMyUserId = Number(myUserId);
 
-        connection.on("ReceivePrivateMessage", (msg: Message) => {
+        // -- RECEIVE MESSAGE --
+        connection.on("ReceivePrivateMessage", async (msg: ChatMessage) => {
           const isRelevant =
-            (msg.senderId === receiverId && msg.receiverId === myUserId) ||
-            (msg.senderId === myUserId && msg.receiverId === receiverId);
+            (msg.senderId === currentReceiverId &&
+              msg.receiverId === currentMyUserId) ||
+            (msg.senderId === currentMyUserId &&
+              msg.receiverId === currentReceiverId);
 
           if (!isRelevant) return;
 
           setMessages((prev) => {
-            const exists = prev.some((m) => m.id === msg.id);
-            if (exists) return prev;
+            if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
 
-          if (msg.senderId === receiverId) {
-            markMessagesAsRead(receiverId).catch(() => {});
+          // API Call para sa Mark as Read kapag live ang message
+          if (msg.senderId === currentReceiverId) {
+            try {
+              const token = await AsyncStorage.getItem("token");
+              await axios.put(
+                `${BASE_URL}/api/Chat/read/${currentReceiverId}`,
+                {},
+                {
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              );
+            } catch (err) {
+              console.log("Live MarkAsRead failed:", err);
+            }
           }
         });
 
-        connection.on("UserTyping", (userId: number) => {
-          if (userId === receiverId) setIsTyping(true);
-        });
-        connection.on("UserStoppedTyping", (userId: number) => {
-          if (userId === receiverId) setIsTyping(false);
-        });
-        connection.on("OnlineStatus", (userId: number, online: boolean) => {
-          if (userId === receiverId) setIsOnline(online);
+        // -- MESSAGE DELIVERED (✓✓ Grey) --
+        connection.on("MessageDelivered", (payload: DeliveredPayload) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === payload.messageId ? { ...m, isDelivered: true } : m,
+            ),
+          );
         });
 
-        await connection.invoke("CheckOnlineStatus", receiverId);
+        // -- MESSAGES SEEN (✓✓ Blue/Accent) --
+        connection.on("MessagesSeen", (payload: SeenPayload) => {
+          if (Number(payload.seenBy) !== currentReceiverId) return;
+          setLastSeenAt(payload.seenAt);
+          setMessages((prev) =>
+            prev.map((m) =>
+              payload.messageIds.includes(m.id)
+                ? { ...m, isRead: true, isDelivered: true }
+                : m,
+            ),
+          );
+        });
+
+        // -- ADDED: ERROR LISTENER (Para malaman kung bakit failed ang send) --
+        connection.on("Error", (errorMessage: string) => {
+          Alert.alert("Chat Error", errorMessage);
+        });
+
+        // -- TYPING & STATUS --
+        connection.on("UserTyping", (uid: number) => {
+          if (uid === currentReceiverId) setIsTyping(true);
+        });
+        connection.on("UserStoppedTyping", (uid: number) => {
+          if (uid === currentReceiverId) setIsTyping(false);
+        });
+        connection.on("OnlineStatus", (uid: number, online: boolean) => {
+          if (uid === currentReceiverId) setIsOnline(online);
+        });
+        connection.on("UserOnline", (uid: string) => {
+          if (Number(uid) === currentReceiverId) setIsOnline(true);
+        });
+        connection.on("UserOffline", (uid: string) => {
+          if (Number(uid) === currentReceiverId) setIsOnline(false);
+        });
+
+        // -- INITIAL ACTIONS --
+        try {
+          if (connection.state === signalR.HubConnectionState.Connected) {
+            // Online status ay sa Hub pa rin
+            await connection.invoke("CheckOnlineStatus", currentReceiverId);
+
+            // MarkAsRead ay via API PUT na (Base sa Swagger mo)
+            const token = await AsyncStorage.getItem("token");
+            await axios.put(
+              `${BASE_URL}/api/Chat/read/${currentReceiverId}`,
+              {},
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+          }
+        } catch (e) {
+          console.log("Initial status/read sync skipped:", e);
+        }
       } catch (err) {
         console.error("Chat setup error:", err);
       } finally {
@@ -160,23 +228,20 @@ export default function ChatScreen() {
     setupChat();
 
     return () => {
-      if (activeConn) {
-        activeConn.off("ReceivePrivateMessage");
-        activeConn.off("UserTyping");
-        activeConn.off("UserStoppedTyping");
-        activeConn.off("OnlineStatus");
+      const c = getChatConnection();
+      if (c) {
+        c.off("ReceivePrivateMessage");
+        c.off("MessageDelivered");
+        c.off("MessagesSeen");
+        c.off("Error"); // Added cleanup for Error listener
+        c.off("UserTyping");
+        c.off("UserStoppedTyping");
+        c.off("OnlineStatus");
       }
     };
   }, [myUserId, receiverId]);
 
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 200);
-    }
-  }, [messages]);
-
+  // 3. Handlers
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text || !conn || sending || !receiverId) return;
@@ -200,15 +265,12 @@ export default function ChatScreen() {
   const handleInputChange = (text: string) => {
     setInputText(text);
     if (!conn || !receiverId) return;
-
     if (!isTypingRef.current && text.length > 0) {
       isTypingRef.current = true;
       conn.invoke("Typing", receiverId).catch(() => {});
     }
-
     if (typingTimer.current) clearTimeout(typingTimer.current);
-
-    typingTimer.current = setTimeout(async () => {
+    typingTimer.current = setTimeout(() => {
       if (isTypingRef.current) {
         isTypingRef.current = false;
         conn.invoke("StopTyping", receiverId).catch(() => {});
@@ -216,13 +278,24 @@ export default function ChatScreen() {
     }, 2000);
   };
 
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isMe = item.isMyMessage;
+  // 4. Render Message
+  const renderMessage = ({
+    item,
+    index,
+  }: {
+    item: ChatMessage;
+    index: number;
+  }) => {
+    const isMe = item.senderId === myUserId;
     const prevMsg = messages[index - 1];
     const showDateLabel =
       !prevMsg ||
       new Date(item.sentAt).toDateString() !==
         new Date(prevMsg.sentAt).toDateString();
+
+    // Check if last sent message para sa Seen label
+    const nextMsg = messages[index + 1];
+    const isLastMyMsg = isMe && (!nextMsg || !nextMsg.isMyMessage);
 
     return (
       <View key={item.id}>
@@ -262,13 +335,24 @@ export default function ChatScreen() {
               <Text style={styles.msgTime}>{formatTime(item.sentAt)}</Text>
               {isMe && (
                 <IconButton
-                  icon={item.isRead ? "check-all" : "check"}
-                  size={12}
+                  icon={
+                    item.isRead
+                      ? "check-all"
+                      : item.isDelivered
+                        ? "check-all"
+                        : "check"
+                  }
+                  size={14}
                   iconColor={item.isRead ? THEME.accent : THEME.muted}
-                  style={{ margin: 0, padding: 0, height: 12, width: 12 }}
+                  style={{ margin: 0, padding: 0, height: 14, width: 14 }}
                 />
               )}
             </View>
+            {isLastMyMsg && item.isRead && lastSeenAt && (
+              <Text style={styles.seenLabel}>
+                Seen {formatTime(lastSeenAt)}
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -283,11 +367,12 @@ export default function ChatScreen() {
     );
   }
 
+  const avatarUri = receiverPic ? `${BASE_URL}${receiverPic}` : null;
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       <Surface style={styles.header} elevation={4}>
         <IconButton
@@ -295,40 +380,37 @@ export default function ChatScreen() {
           iconColor={THEME.text}
           onPress={() => router.back()}
         />
-        <Avatar.Text
-          size={40}
-          label={receiverName ? receiverName[0].toUpperCase() : "?"}
-          style={{ backgroundColor: THEME.primary }}
-          labelStyle={{ color: THEME.accent }}
-        />
+        <View style={styles.headerAvatarContainer}>
+          {avatarUri ? (
+            <Avatar.Image size={40} source={{ uri: avatarUri }} />
+          ) : (
+            <Avatar.Text
+              size={40}
+              label={receiverName[0].toUpperCase()}
+              style={{ backgroundColor: THEME.primary }}
+              labelStyle={{ color: THEME.accent }}
+            />
+          )}
+          {isOnline && <View style={styles.headerOnlineDot} />}
+        </View>
         <View style={styles.headerInfo}>
           <Text variant="titleMedium" style={styles.headerName}>
             {receiverName}
           </Text>
-          <View style={styles.statusRow}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isOnline ? THEME.online : THEME.muted },
-              ]}
-            />
-            <Text
-              style={{
-                color: isOnline ? THEME.online : THEME.muted,
-                fontSize: 11,
-                fontWeight: "bold",
-              }}
-            >
-              {isOnline ? "ONLINE" : "OFFLINE"}
-              {isTyping && " | TYPING..."}
-            </Text>
-          </View>
+          <Text
+            style={{
+              color: isTyping
+                ? THEME.accent
+                : isOnline
+                  ? THEME.online
+                  : THEME.muted,
+              fontSize: 11,
+              fontWeight: "bold",
+            }}
+          >
+            {isTyping ? "TYPING..." : isOnline ? "ONLINE" : "OFFLINE"}
+          </Text>
         </View>
-        <IconButton
-          icon="video-outline"
-          iconColor={THEME.accent}
-          onPress={() => {}}
-        />
       </Surface>
 
       <FlatList
@@ -356,7 +438,6 @@ export default function ChatScreen() {
             borderColor: "rgba(0, 245, 255, 0.2)",
           }}
           activeOutlineColor={THEME.accent}
-          multiline={false}
           right={
             <PaperInput.Icon
               icon="send"
@@ -378,63 +459,56 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: THEME.surface,
-    paddingVertical: 10,
-    paddingRight: 8,
-    paddingTop: Platform.OS === "ios" ? 50 : 40,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 245, 255, 0.1)",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  headerAvatarContainer: { position: "relative" },
+  headerOnlineDot: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: THEME.online,
+    borderWidth: 2,
+    borderColor: THEME.surface,
   },
   headerInfo: { flex: 1, marginLeft: 12 },
-  headerName: { fontWeight: "bold", color: THEME.text },
-  statusRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
-  messagesList: { padding: 16, paddingBottom: 20 },
-  msgRow: { flexDirection: "row", marginBottom: 16 },
+  headerName: { color: THEME.text, fontWeight: "bold" },
+  messagesList: { padding: 16 },
+  msgRow: { flexDirection: "row", marginBottom: 12 },
   msgRowLeft: { justifyContent: "flex-start" },
   msgRowRight: { justifyContent: "flex-end" },
   msgContent: { maxWidth: "80%" },
   msgContentLeft: { alignItems: "flex-start" },
   msgContentRight: { alignItems: "flex-end" },
-  bubble: { padding: 12, borderRadius: 18, borderTopLeftRadius: 18 },
-  bubbleSent: {
-    backgroundColor: THEME.primary,
-    borderBottomRightRadius: 2,
-    shadowColor: THEME.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  bubbleReceived: {
-    backgroundColor: THEME.surface,
-    borderBottomLeftRadius: 2,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
-  },
+  bubble: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
+  bubbleSent: { backgroundColor: THEME.primary, borderBottomRightRadius: 4 },
+  bubbleReceived: { backgroundColor: THEME.surface, borderBottomLeftRadius: 4 },
   bubbleText: { fontSize: 15, lineHeight: 20 },
-  bubbleTextSent: { color: "#FFF" },
+  bubbleTextSent: { color: "white" },
   bubbleTextReceived: { color: THEME.text },
-  timeRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  timeRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 },
   msgTime: { fontSize: 10, color: THEME.muted },
+  seenLabel: {
+    fontSize: 10,
+    color: THEME.accent,
+    fontStyle: "italic",
+    marginTop: 2,
+  },
   dateDivider: {
     flexDirection: "row",
     alignItems: "center",
     marginVertical: 20,
   },
-  dateLine: { flex: 1, height: 1, backgroundColor: "rgba(255, 255, 255, 0.1)" },
+  dateLine: { flex: 1, height: 1, backgroundColor: "rgba(148, 163, 184, 0.2)" },
   dateLabel: {
     marginHorizontal: 10,
     color: THEME.muted,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "bold",
   },
-  inputBar: {
-    padding: 12,
-    backgroundColor: THEME.surface,
-    paddingBottom: Platform.OS === "ios" ? 30 : 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0, 245, 255, 0.1)",
-  },
-  input: {
-    backgroundColor: THEME.bg,
-    maxHeight: 50,
-  },
+  inputBar: { padding: 10, backgroundColor: THEME.surface },
+  input: { backgroundColor: THEME.bg, height: 45 },
 });

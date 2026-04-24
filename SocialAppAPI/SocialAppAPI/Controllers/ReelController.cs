@@ -1,14 +1,14 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 using SocialAppAPI.DTOs;
 using SocialAppAPI.Services;
+using System.Security.Claims;
 
 namespace SocialAppAPI.Controllers
 {
+    [Route("api/[controller]")]
     [ApiController]
-    [Route("api/[controller]")] // Route: /api/reel
-    [Authorize]                 // 🔒 Requires JWT
+    [Authorize] // ← Secure! JWT required
     public class ReelController : ControllerBase
     {
         private readonly ReelService _reelService;
@@ -18,91 +18,76 @@ namespace SocialAppAPI.Controllers
             _reelService = reelService;
         }
 
+        // Helper: Kukunin ang current user ID mula sa JWT
         private int GetCurrentUserId() =>
             int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
-        // ── UPLOAD REEL ────────────────────────────────────────────────
-        // POST /api/reel
-        [HttpPost]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UploadReel([FromForm] CreateReelDto dto)
-        {
-            var userId = GetCurrentUserId();
-            var (success, message, reel) = await _reelService.UploadReelAsync(userId, dto);
-
-            if (!success) return BadRequest(new { message });
-            return Ok(new { message, reel });
-        }
-
-        // ── GET REELS FEED ─────────────────────────────────────────────
-        // GET /api/reel/feed?page=1
-        [HttpGet("feed")]
-        public async Task<IActionResult> GetFeed([FromQuery] int page = 1)
+        // GET: api/Reel (Feed)
+        [HttpGet]
+        public async Task<IActionResult> GetReels([FromQuery] int page = 1)
         {
             var userId = GetCurrentUserId();
             var reels = await _reelService.GetReelsAsync(userId, page);
             return Ok(reels);
         }
 
-        // ── GET USER REELS ─────────────────────────────────────────────
-        // GET /api/reel/user/{userId}
-        [HttpGet("user/{userId}")]
-        public async Task<IActionResult> GetUserReels(int userId)
+        // GET: api/Reel/user/{profileUserId}
+        [HttpGet("user/{profileUserId}")]
+        public async Task<IActionResult> GetUserReels(int profileUserId)
         {
             var currentUserId = GetCurrentUserId();
-            var reels = await _reelService.GetUserReelsAsync(userId, currentUserId);
+            var reels = await _reelService.GetUserReelsAsync(profileUserId, currentUserId);
             return Ok(reels);
         }
 
-        // ── TOGGLE LIKE ────────────────────────────────────────────────
-        // POST /api/reel/like/{reelId}
-        [HttpPost("like/{reelId}")]
-        public async Task<IActionResult> ToggleLike(int reelId)
+        // POST: api/Reel/upload
+        [HttpPost("upload")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadReel([FromForm] CreateReelDto dto)
         {
             var userId = GetCurrentUserId();
-            var (success, action, likeCount) =
-                await _reelService.ToggleLikeAsync(reelId, userId);
-
-            if (!success) return NotFound(new { message = action });
-            return Ok(new { action, likeCount, isLiked = action == "liked" });
+            var result = await _reelService.UploadReelAsync(userId, dto);
+            if (!result.Success) return BadRequest(new { message = result.Message });
+            return Ok(result);
         }
 
-        // ── ADD COMMENT ────────────────────────────────────────────────
-        // POST /api/reel/comment/{reelId}
-        [HttpPost("comment/{reelId}")]
-        public async Task<IActionResult> AddComment(
-            int reelId, [FromBody] AddCommentDto dto)
+        // POST: api/Reel/{id}/like
+        [HttpPost("{id}/like")]
+        public async Task<IActionResult> ToggleLike(int id)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-
             var userId = GetCurrentUserId();
-            var (success, message, comment) =
-                await _reelService.AddCommentAsync(reelId, userId, dto.Content);
-
-            if (!success) return BadRequest(new { message });
-            return Ok(new { message, comment });
+            var result = await _reelService.ToggleLikeAsync(id, userId);
+            if (!result.Success) return BadRequest(new { message = result.Action });
+            return Ok(result);
         }
 
-        // ── GET COMMENTS ───────────────────────────────────────────────
-        // GET /api/reel/comments/{reelId}
-        [HttpGet("comments/{reelId}")]
-        public async Task<IActionResult> GetComments(int reelId)
+        // POST: api/Reel/{id}/comment
+        [HttpPost("{id}/comment")]
+        public async Task<IActionResult> AddComment(int id, [FromBody] string content)
         {
             var userId = GetCurrentUserId();
-            var comments = await _reelService.GetCommentsAsync(reelId, userId);
+            var result = await _reelService.AddCommentAsync(id, userId, content);
+            if (!result.Success) return BadRequest(new { message = result.Message });
+            return Ok(result);
+        }
+
+        // GET: api/Reel/{id}/comments
+        [HttpGet("{id}/comments")]
+        public async Task<IActionResult> GetComments(int id)
+        {
+            var userId = GetCurrentUserId();
+            var comments = await _reelService.GetCommentsAsync(id, userId);
             return Ok(comments);
         }
 
-        // ── DELETE REEL ────────────────────────────────────────────────
-        // DELETE /api/reel/{reelId}
-        [HttpDelete("{reelId}")]
-        public async Task<IActionResult> DeleteReel(int reelId)
+        // DELETE: api/Reel/{id}
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteReel(int id)
         {
             var userId = GetCurrentUserId();
-            var (success, message) = await _reelService.DeleteReelAsync(reelId, userId);
-
-            if (!success) return BadRequest(new { message });
-            return Ok(new { message });
+            var result = await _reelService.DeleteReelAsync(id, userId);
+            if (!result.Success) return BadRequest(new { message = result.Message });
+            return Ok(new { message = result.Message });
         }
     }
 }

@@ -14,7 +14,7 @@ namespace SocialAppAPI.Models
         public User Receiver   { get; set; } = null!;
 
         public string Content { get; set; } = string.Empty; // Message text
-
+        public bool IsDelivered { get; set; } = false;
         public bool IsRead { get; set; } = false; // Has receiver seen this?
 
         public DateTime SentAt { get; set; } = DateTime.UtcNow;

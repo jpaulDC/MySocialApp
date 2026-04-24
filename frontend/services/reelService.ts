@@ -1,6 +1,5 @@
 ﻿import api from "./api";
 
-// ── TYPES ──────────────────────────────────────────────────────────────
 export interface Reel {
   id: number;
   videoUrl: string;
@@ -42,7 +41,8 @@ export const uploadReel = async (
   } as any);
   if (caption) formData.append("caption", caption);
 
-  const res = await api.post("/reel", formData, {
+  const res = await api.post("/reel/upload", formData, {
+    // ← FIXED
     headers: { "Content-Type": "multipart/form-data" },
   });
   return res.data.reel;
@@ -50,13 +50,13 @@ export const uploadReel = async (
 
 // ── GET REELS FEED ─────────────────────────────────────────────────────
 export const getReels = async (page: number = 1): Promise<Reel[]> => {
-  const res = await api.get(`/reel/feed?page=${page}`);
+  const res = await api.get(`/reel?page=${page}`); // ← FIXED
   return res.data;
 };
 
 // ── TOGGLE REEL LIKE ───────────────────────────────────────────────────
 export const toggleReelLike = async (reelId: number) => {
-  const res = await api.post(`/reel/like/${reelId}`);
+  const res = await api.post(`/reel/${reelId}/like`); // ← FIXED
   return res.data;
 };
 
@@ -64,7 +64,7 @@ export const toggleReelLike = async (reelId: number) => {
 export const getReelComments = async (
   reelId: number,
 ): Promise<ReelComment[]> => {
-  const res = await api.get(`/reel/comments/${reelId}`);
+  const res = await api.get(`/reel/${reelId}/comments`); // ← FIXED
   return res.data;
 };
 
@@ -73,7 +73,14 @@ export const addReelComment = async (
   reelId: number,
   content: string,
 ): Promise<ReelComment> => {
-  const res = await api.post(`/reel/comment/${reelId}`, { content });
+  const res = await api.post(
+    `/reel/${reelId}/comment`,
+    JSON.stringify(content),
+    {
+      // ← FIXED
+      headers: { "Content-Type": "application/json" },
+    },
+  );
   return res.data.comment;
 };
 
