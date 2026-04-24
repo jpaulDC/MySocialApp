@@ -1,142 +1,217 @@
-﻿import React, { useState } from 'react';
-import { View, StyleSheet, Alert, ScrollView } from 'react-native';
-import { TextInput, Button, Text, Surface } from 'react-native-paper';
-import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../../services/api';
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import { Alert, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Button, Surface, Text, TextInput } from "react-native-paper";
+import api from "../../services/api";
+
+// ── THEME CONSTANTS ────────────────────────────────────────────────────
+const THEME = {
+  bg: "#000000",
+  card: "#1A222E",
+  primary: "#2563EB",
+  accent: "#00F5FF",
+  text: "#FFFFFF",
+  muted: "#94A3B8",
+};
 
 export default function LoginScreen() {
-    const router = useRouter();
+  const router = useRouter();
 
-    // Form state
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [showPass, setShowPass] = useState(false);
+  // Form state
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
-    const handleLogin = async () => {
-        if (!email || !password) {
-            Alert.alert('Error', 'Please enter your email and password.');
-            return;
-        }
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter your email and password.");
+      return;
+    }
 
-        setLoading(true);
-        try {
-            // Siguraduhin na ang /auth/login ay tumutugma sa .NET Controller mo
-            const response = await api.post('/auth/login', { email, password });
-            const { token } = response.data;
+    setLoading(true);
+    try {
+      const response = await api.post("/auth/login", { email, password });
+      const { token } = response.data;
 
-            // I-save ang JWT token (Nilagyan ng check para sa AsyncStorage)
-            if (token) {
-                await AsyncStorage.setItem('token', token);
-                // FIXED ROUTE: Dahil nasa (tabs) folder ang index, gamitin ang "/" o "/(tabs)"
-                router.replace('/');
-            } else {
-                Alert.alert('Login Failed', 'No token received from server.');
-            }
+      if (token) {
+        await AsyncStorage.setItem("token", token);
+        router.replace("/");
+      } else {
+        Alert.alert("Login Failed", "No token received from server.");
+      }
+    } catch (error: any) {
+      console.error(error);
+      const msg =
+        error.response?.data?.message || "Login failed. Check your connection.";
+      Alert.alert("Login Failed", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        } catch (error: any) {
-            console.error(error);
-            const msg = error.response?.data?.message || 'Login failed. Check your connection.';
-            Alert.alert('Login Failed', msg);
-        } finally {
-            setLoading(false);
-        }
-    };
+  return (
+    <ScrollView
+      contentContainerStyle={styles.container}
+      bounces={false}
+      keyboardShouldPersistTaps="handled" // Importante para sa mobile/web clicks
+    >
+      <View style={styles.wrapper}>
+        <Surface style={styles.card} elevation={5}>
+          {/* Neon Side Accent - Inilipat para hindi humarang */}
+          <View style={styles.sideAccent} pointerEvents="none" />
 
-    return (
-        <ScrollView contentContainerStyle={styles.container}>
-            <Surface style={styles.card} elevation={4}>
-                {/* Logo / Title */}
-                <Text variant="displaySmall" style={styles.logo}>📱</Text>
-                <Text variant="headlineMedium" style={styles.title}>Social Metas App</Text>
-                <Text variant="bodyMedium" style={styles.subtitle}>Welcome back!</Text>
+          {/* Logo / Title */}
+          <Text style={styles.logoEmoji}>🛡️</Text>
+          <Text style={styles.title}>SOCIAL_METAS</Text>
+          <Text style={styles.subtitle}>AUTHENTICATION_REQUIRED</Text>
 
-                {/* Email Input */}
-                <TextInput
-                    label="Email"
-                    value={email}
-                    onChangeText={setEmail}
-                    mode="outlined"
-                    style={styles.input}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    left={<TextInput.Icon icon="email" />}
+          <View style={styles.form}>
+            <TextInput
+              label="Email Address"
+              value={email}
+              onChangeText={setEmail}
+              mode="outlined"
+              style={styles.input}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              outlineColor={THEME.card}
+              activeOutlineColor={THEME.accent}
+              textColor={THEME.text}
+              theme={{ colors: { onSurfaceVariant: THEME.muted } }}
+              left={<TextInput.Icon icon="email" color={THEME.muted} />}
+            />
+
+            <TextInput
+              label="Security Password"
+              value={password}
+              onChangeText={setPassword}
+              mode="outlined"
+              style={styles.input}
+              secureTextEntry={!showPass}
+              outlineColor={THEME.card}
+              activeOutlineColor={THEME.accent}
+              textColor={THEME.text}
+              theme={{ colors: { onSurfaceVariant: THEME.muted } }}
+              left={<TextInput.Icon icon="lock" color={THEME.muted} />}
+              right={
+                <TextInput.Icon
+                  icon={showPass ? "eye-off" : "eye"}
+                  color={THEME.accent}
+                  onPress={() => setShowPass(!showPass)}
                 />
+              }
+            />
 
-                {/* Password Input */}
-                <TextInput
-                    label="Password"
-                    value={password}
-                    onChangeText={setPassword}
-                    mode="outlined"
-                    style={styles.input}
-                    secureTextEntry={!showPass}
-                    left={<TextInput.Icon icon="lock" />}
-                    right={
-                        <TextInput.Icon
-                            icon={showPass ? 'eye-off' : 'eye'}
-                            onPress={() => setShowPass(!showPass)}
-                        />
-                    }
-                />
+            <Button
+              mode="contained"
+              onPress={handleLogin}
+              loading={loading}
+              disabled={loading}
+              style={styles.button}
+              buttonColor={THEME.accent}
+              textColor="#000"
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.buttonLabel}
+            >
+              {loading ? "INITIALIZING..." : "LOGIN_SECURELY"}
+            </Button>
 
-                {/* Login Button */}
-                <Button
-                    mode="contained"
-                    onPress={handleLogin}
-                    loading={loading}
-                    disabled={loading}
-                    style={styles.button}
-                    contentStyle={styles.buttonContent}
-                >
-                    Login
-                </Button>
-
-                {/* FIXED ROUTE: Alisin ang (auth) sa path */}
-                <Button mode="text" onPress={() => router.replace('/register' as any)}>
-                    Dont have an account? Register
-                </Button>
-            </Surface>
-        </ScrollView>
-    );
+            <Button
+              mode="text"
+              onPress={() => router.replace("/register" as any)}
+              textColor={THEME.muted}
+              style={styles.registerBtn}
+            >
+              NEW_USER?{" "}
+              <Text style={{ color: THEME.accent, fontWeight: "bold" }}>
+                REGISTER_HERE
+              </Text>
+            </Button>
+          </View>
+        </Surface>
+      </View>
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flexGrow: 1,
-        justifyContent: 'center',
-        padding: 20,
-        backgroundColor: '#f0f2f5',
-    },
-    card: {
-        padding: 24,
-        borderRadius: 16,
-        backgroundColor: 'white',
-    },
-    logo: {
-        textAlign: 'center',
-        marginBottom: 4,
-    },
-    title: {
-        textAlign: 'center',
-        fontWeight: 'bold',
-        color: '#1a1a2e',
-    },
-    subtitle: {
-        textAlign: 'center',
-        color: '#666',
-        marginBottom: 24,
-    },
-    input: {
-        marginBottom: 12,
-    },
-    button: {
-        marginTop: 8,
-        marginBottom: 8,
-        borderRadius: 8,
-    },
-    buttonContent: {
-        paddingVertical: 6,
-    },
+  container: {
+    flexGrow: 1,
+    justifyContent: "center",
+    backgroundColor: THEME.bg,
+  },
+  wrapper: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 450 : "100%", // Limit width sa PC para hindi stretch
+    alignSelf: "center",
+    padding: 24,
+  },
+  card: {
+    padding: 30,
+    borderRadius: 25,
+    backgroundColor: THEME.card,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    zIndex: 1, // Siniguradong nasa taas ang card
+  },
+  sideAccent: {
+    position: "absolute",
+    left: 0,
+    top: 40,
+    bottom: 40,
+    width: 4,
+    backgroundColor: THEME.accent,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  logoEmoji: {
+    fontSize: 50,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  title: {
+    textAlign: "center",
+    fontWeight: "900",
+    color: THEME.text,
+    fontSize: 24,
+    letterSpacing: 3,
+  },
+  subtitle: {
+    textAlign: "center",
+    color: THEME.accent,
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 1.5,
+    marginBottom: 35,
+    opacity: 0.8,
+  },
+  form: {
+    width: "100%",
+    zIndex: 10, // Siniguradong ang form contents ang nasa pinakataas
+  },
+  input: {
+    marginBottom: 16,
+    backgroundColor: "#0F172A",
+  },
+  button: {
+    marginTop: 10,
+    borderRadius: 12,
+    height: 55,
+    justifyContent: "center",
+    elevation: 8,
+  },
+  buttonContent: {
+    height: 55,
+  },
+  buttonLabel: {
+    fontWeight: "900",
+    letterSpacing: 1,
+    fontSize: 15,
+  },
+  registerBtn: {
+    marginTop: 15,
+  },
 });

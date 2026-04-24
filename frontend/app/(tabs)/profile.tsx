@@ -23,6 +23,16 @@ import { getMyProfile, UserProfile } from "../../services/userService";
 // Gamitin ang tamang IP at Port para sa Profile Pictures
 const BASE_URL = "http://192.168.1.105:5261";
 
+// THEME CONSTANTS (Para madaling i-adjust)
+const COLORS = {
+  background: "#0A0A0A",
+  primary: "#2563EB",
+  accent: "#00F5FF",
+  secondary: "#1E293B",
+  textMain: "#E2E8F0",
+  textMuted: "#94A3B8",
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
 
@@ -80,9 +90,11 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 12 }}>Loading profile...</Text>
+      <View style={[styles.centered, { backgroundColor: COLORS.background }]}>
+        <ActivityIndicator size="large" color={COLORS.accent} />
+        <Text style={{ marginTop: 12, color: COLORS.accent }}>
+          Loading profile...
+        </Text>
       </View>
     );
   }
@@ -103,15 +115,29 @@ export default function ProfileScreen() {
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={COLORS.accent}
+          colors={[COLORS.accent]}
+        />
       }
     >
-      <Surface style={styles.header} elevation={2}>
+      <Surface style={styles.header} elevation={4}>
         <View style={styles.avatarContainer}>
           {avatarUri ? (
-            <Avatar.Image size={100} source={{ uri: avatarUri }} />
+            <Avatar.Image
+              size={100}
+              source={{ uri: avatarUri }}
+              style={styles.avatarBorder}
+            />
           ) : (
-            <Avatar.Text size={100} label={initials} />
+            <Avatar.Text
+              size={100}
+              label={initials}
+              style={{ backgroundColor: COLORS.primary }}
+              labelStyle={{ color: COLORS.accent }}
+            />
           )}
         </View>
 
@@ -128,11 +154,15 @@ export default function ProfileScreen() {
           </Text>
         ) : (
           <Text variant="bodySmall" style={styles.noBio}>
-            No bio yet.
+            // system: no bio found
           </Text>
         )}
 
-        <Chip icon="calendar" style={styles.chip}>
+        <Chip
+          icon="calendar"
+          style={styles.chip}
+          textStyle={{ color: COLORS.accent }}
+        >
           Joined{" "}
           {profile?.createdAt
             ? new Date(profile.createdAt).toLocaleDateString()
@@ -146,6 +176,8 @@ export default function ProfileScreen() {
           icon="account-edit"
           onPress={() => router.push("/(tabs)/edit-profile")}
           style={[styles.actionBtn, { flex: 1, marginRight: 8 }]}
+          buttonColor={COLORS.primary}
+          textColor="white"
         >
           Edit Profile
         </Button>
@@ -153,22 +185,22 @@ export default function ProfileScreen() {
           mode="outlined"
           icon="logout"
           onPress={handleLogout}
-          style={[styles.actionBtn, { flex: 1 }]}
-          textColor="red"
+          style={[styles.actionBtn, { flex: 1, borderColor: "#FF4B4B" }]}
+          textColor="#FF4B4B"
         >
           Logout
         </Button>
       </View>
 
-      <Divider style={{ marginVertical: 16 }} />
+      <Divider style={styles.divider} />
 
-      <Surface style={styles.statsRow} elevation={1}>
+      <Surface style={styles.statsRow} elevation={2}>
         <View style={styles.statItem}>
           <Text variant="titleLarge" style={styles.statNumber}>
             0
           </Text>
           <Text variant="bodySmall" style={styles.statLabel}>
-            Posts
+            POSTS
           </Text>
         </View>
         <View style={styles.statDivider} />
@@ -177,7 +209,7 @@ export default function ProfileScreen() {
             0
           </Text>
           <Text variant="bodySmall" style={styles.statLabel}>
-            Friends
+            FRIENDS
           </Text>
         </View>
         <View style={styles.statDivider} />
@@ -186,7 +218,7 @@ export default function ProfileScreen() {
             0
           </Text>
           <Text variant="bodySmall" style={styles.statLabel}>
-            Likes
+            LIKES
           </Text>
         </View>
       </Surface>
@@ -194,11 +226,10 @@ export default function ProfileScreen() {
   );
 }
 
-// ── DITO NAGKA-RED LINE DAHIL NAWALA ITONG PART NA ITO ──
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f0f2f5",
+    backgroundColor: COLORS.background,
   },
   centered: {
     flex: 1,
@@ -209,34 +240,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 24,
     margin: 16,
-    borderRadius: 16,
-    backgroundColor: "white",
+    borderRadius: 20,
+    backgroundColor: COLORS.secondary,
+    borderWidth: 1,
+    borderColor: "rgba(0, 245, 255, 0.1)",
   },
   avatarContainer: {
     marginBottom: 12,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  avatarBorder: {
+    borderWidth: 2,
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.background,
   },
   fullName: {
     fontWeight: "bold",
-    color: "#1a1a2e",
+    color: COLORS.textMain,
+    letterSpacing: 1,
   },
   username: {
-    color: "#666",
+    color: COLORS.accent,
     marginBottom: 8,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   bio: {
     textAlign: "center",
-    color: "#444",
+    color: COLORS.textMuted,
     marginVertical: 8,
     paddingHorizontal: 16,
+    lineHeight: 20,
   },
   noBio: {
-    color: "#aaa",
+    color: "#4A5568",
     fontStyle: "italic",
     marginVertical: 8,
   },
   chip: {
     marginTop: 8,
-    backgroundColor: "#e8f4ff",
+    backgroundColor: "rgba(0, 245, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: COLORS.accent,
   },
   actions: {
     flexDirection: "row",
@@ -245,14 +293,23 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     borderRadius: 8,
+    height: 48,
+    justifyContent: "center",
+  },
+  divider: {
+    marginVertical: 16,
+    backgroundColor: "rgba(226, 232, 240, 0.1)",
+    marginHorizontal: 20,
   },
   statsRow: {
     flexDirection: "row",
     marginHorizontal: 16,
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 20,
+    backgroundColor: COLORS.secondary,
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(226, 232, 240, 0.05)",
   },
   statItem: {
     flex: 1,
@@ -260,13 +317,17 @@ const styles = StyleSheet.create({
   },
   statNumber: {
     fontWeight: "bold",
-    color: "#1a1a2e",
+    color: COLORS.textMain,
   },
   statLabel: {
-    color: "#888",
+    color: COLORS.accent,
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 1,
   },
   statDivider: {
     width: 1,
-    backgroundColor: "#eee",
+    backgroundColor: "rgba(226, 232, 240, 0.1)",
+    height: "100%",
   },
 });

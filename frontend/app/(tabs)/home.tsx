@@ -3,47 +3,53 @@ import { useRouter } from "expo-router";
 import { jwtDecode } from "jwt-decode";
 import React, { memo, useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    FlatList,
-    Image,
-    RefreshControl,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Button,
-    Divider,
-    FAB,
-    IconButton,
-    Surface,
-    Text,
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Divider,
+  FAB,
+  IconButton,
+  Surface,
+  Text,
 } from "react-native-paper";
 
-// Iyong mga Custom Services
 import { toggleLike } from "../../services/likeCommentService";
 import { deletePost, getFeed, Post } from "../../services/postService";
 
-// PALITAN MO ITO NG IP NA GAMIT MO SA LOGIN (e.g., 192.168.1.15)
 const BASE_URL = "http://192.168.1.105:5261";
 
-// Helper function para sa oras
+// THEME COLORS (Match sa Profile)
+const COLORS = {
+  background: "#0A0A0A",
+  surface: "#1E293B",
+  primary: "#2563EB",
+  accent: "#00F5FF",
+  textMain: "#E2E8F0",
+  textMuted: "#94A3B8",
+  danger: "#FF4B4B",
+};
+
 function timeAgo(dateStr: string): string {
   if (!dateStr) return "";
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(mins / 60);
   const days = Math.floor(hours / 24);
-
   if (mins < 1) return "Just now";
   if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
   return `${days}d ago`;
 }
 
-// ── SEPARATE COMPONENT FOR POST ITEM ──────────────────────────────────
 const PostItem = memo(function PostItemBase({
   item,
   myUserId,
@@ -53,7 +59,6 @@ const PostItem = memo(function PostItemBase({
   const avatarUri = item.profilePicture
     ? `${BASE_URL}${item.profilePicture}`
     : null;
-
   const displayName = item.fullName || item.username || "User";
   const initials = displayName[0]?.toUpperCase() ?? "?";
   const isMyPost = item.userId === myUserId;
@@ -71,7 +76,6 @@ const PostItem = memo(function PostItemBase({
     const prevCount = likeCount;
     setLiked(!wasLiked);
     setLikeCount(wasLiked ? likeCount - 1 : likeCount + 1);
-
     try {
       const res = await toggleLike(item.id);
       setLiked(res.isLiked);
@@ -84,48 +88,51 @@ const PostItem = memo(function PostItemBase({
   };
 
   const goToDetail = () => {
-    const updatedPost = {
-      ...item,
-      isLikedByMe: liked,
-      likeCount: likeCount,
-    };
-    // FIX: Tinitiyak na ang path ay tugma sa folder structure mo
     router.push({
       pathname: "/(tabs)/post-detail",
       params: {
-        postId: item.id.toString(), // Importante ito para sa refresh
+        postId: item.id.toString(),
         post: JSON.stringify(item),
       },
     });
   };
 
   return (
-    <Surface style={styles.postCard} elevation={1}>
+    <Surface style={styles.postCard} elevation={2}>
       <View style={styles.postHeader}>
         {avatarUri ? (
-          <Avatar.Image size={42} source={{ uri: avatarUri }} />
+          <Avatar.Image
+            size={42}
+            source={{ uri: avatarUri }}
+            style={styles.avatarBorder}
+          />
         ) : (
-          <Avatar.Text size={42} label={initials} />
+          <Avatar.Text
+            size={42}
+            label={initials}
+            style={{ backgroundColor: COLORS.primary }}
+            labelStyle={{ color: COLORS.accent }}
+          />
         )}
         <View style={styles.postHeaderInfo}>
           <Text variant="titleSmall" style={styles.postName}>
             {displayName}
           </Text>
           <Text variant="bodySmall" style={styles.postTime}>
-            @{item.username} · {timeAgo(item.createdAt)}
+            @{item.username} • {timeAgo(item.createdAt)}
           </Text>
         </View>
         {isMyPost && (
           <IconButton
             icon="delete-outline"
             size={20}
-            iconColor="#e74c3c"
+            iconColor={COLORS.danger}
             onPress={() => handleDelete(item.id)}
           />
         )}
       </View>
 
-      <TouchableOpacity onPress={goToDetail} activeOpacity={0.9}>
+      <TouchableOpacity onPress={goToDetail} activeOpacity={0.8}>
         {item.content ? (
           <Text variant="bodyMedium" style={styles.postContent}>
             {item.content}
@@ -140,22 +147,26 @@ const PostItem = memo(function PostItemBase({
         ) : null}
       </TouchableOpacity>
 
-      <Divider style={{ marginVertical: 8 }} />
+      <Divider style={styles.cardDivider} />
 
       <View style={styles.postActions}>
         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
           <IconButton
             icon={liked ? "heart" : "heart-outline"}
-            size={22}
-            iconColor={liked ? "#e74c3c" : "#666"}
+            size={20}
+            iconColor={liked ? COLORS.danger : COLORS.textMuted}
           />
-          <Text style={[styles.actionCount, liked && { color: "#e74c3c" }]}>
+          <Text style={[styles.actionCount, liked && { color: COLORS.danger }]}>
             {likeCount}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionBtn} onPress={goToDetail}>
-          <IconButton icon="comment-outline" size={22} iconColor="#666" />
+          <IconButton
+            icon="comment-outline"
+            size={20}
+            iconColor={COLORS.textMuted}
+          />
           <Text style={styles.actionCount}>{item.commentCount}</Text>
         </TouchableOpacity>
       </View>
@@ -163,7 +174,6 @@ const PostItem = memo(function PostItemBase({
   );
 });
 
-// ── MAIN SCREEN ─────────────────────────────────────────────────────
 export default function HomeScreen() {
   const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
@@ -174,14 +184,12 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
-  // Pinagsama ang initialization logic
   useEffect(() => {
     const init = async () => {
       const token = await AsyncStorage.getItem("token");
       if (token) {
         try {
           const decoded: any = jwtDecode(token);
-          // Standard JWT claim for User ID
           const id =
             decoded[
               "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
@@ -191,7 +199,7 @@ export default function HomeScreen() {
           console.log("Token decode error", e);
         }
       }
-      loadFeed(1, true); // Initial load ng posts
+      loadFeed(1, true);
     };
     init();
   }, []);
@@ -205,12 +213,10 @@ export default function HomeScreen() {
       } else {
         setPosts((prev) => [...prev, ...data]);
       }
-      // Pag mas mababa sa 10 ang bumalik, wala na itong kasunod
       setHasMore(data.length >= 10);
     } catch (err) {
       console.error("Feed error:", err);
-      if (pageNum === 1)
-        Alert.alert("Error", "Failed to load feed. Check your connection.");
+      if (pageNum === 1) Alert.alert("Error", "Failed to load feed.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -232,7 +238,7 @@ export default function HomeScreen() {
   };
 
   const handleDelete = (postId: number) => {
-    Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
+    Alert.alert("Delete Post", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -242,7 +248,7 @@ export default function HomeScreen() {
             await deletePost(postId);
             setPosts((prev) => prev.filter((p) => p.id !== postId));
           } catch {
-            Alert.alert("Error", "Failed to delete post.");
+            Alert.alert("Error", "Failed to delete.");
           }
         },
       },
@@ -251,19 +257,22 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6200ee" />
-        <Text style={{ marginTop: 12 }}>Loading feed...</Text>
+      <View style={[styles.centered, { backgroundColor: COLORS.background }]}>
+        <ActivityIndicator size="large" color={COLORS.accent} />
+        <Text style={{ marginTop: 12, color: COLORS.accent }}>
+          Syncing Feed...
+        </Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Surface style={styles.appBar} elevation={2}>
+      <Surface style={styles.appBar} elevation={4}>
         <Text variant="headlineSmall" style={styles.appBarTitle}>
-          📱 SocialApp
+          SOCIAL<Text style={{ color: COLORS.accent }}>APP</Text>
         </Text>
+        <IconButton icon="bell-outline" iconColor={COLORS.textMain} size={24} />
       </Surface>
 
       <FlatList
@@ -281,34 +290,34 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#6200ee"]}
+            tintColor={COLORS.accent}
           />
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator style={{ padding: 16 }} />
+            <ActivityIndicator style={{ padding: 16 }} color={COLORS.accent} />
           ) : (
-            <View style={{ height: 80 }} />
+            <View style={{ height: 100 }} />
           )
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📭</Text>
+            <Text style={styles.emptyIcon}>📡</Text>
             <Text variant="titleMedium" style={styles.emptyText}>
-              Your feed is empty
+              Feed Offline
             </Text>
             <Text variant="bodySmall" style={styles.emptySubtext}>
-              Be the first to post something!
+              No signals detected in your area.
             </Text>
             <Button
               mode="contained"
-              style={{ marginTop: 16 }}
+              style={{ marginTop: 24, backgroundColor: COLORS.primary }}
               icon="plus"
               onPress={() => router.push("/(tabs)/create-post")}
             >
-              Create Post
+              Broadcast Now
             </Button>
           </View>
         }
@@ -320,56 +329,77 @@ export default function HomeScreen() {
       <FAB
         icon="plus"
         style={styles.fab}
+        color={COLORS.background}
         onPress={() => router.push("/(tabs)/create-post")}
-        label="Post"
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f0f2f5" },
+  container: { flex: 1, backgroundColor: COLORS.background },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   appBar: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "white",
+    paddingTop: 45, // Para iwas sa notch
+    paddingBottom: 12,
+    backgroundColor: COLORS.surface,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 245, 255, 0.1)",
   },
-  appBarTitle: { fontWeight: "bold", color: "#1a1a2e" },
+  appBarTitle: { fontWeight: "900", color: COLORS.textMain, letterSpacing: 2 },
   postCard: {
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: "white",
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: COLORS.surface,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(226, 232, 240, 0.05)",
   },
-  postHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  postHeaderInfo: { flex: 1, marginLeft: 10 },
-  postName: { fontWeight: "bold", color: "#1a1a2e" },
-  postTime: { color: "#888" },
+  postHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  postHeaderInfo: { flex: 1, marginLeft: 12 },
+  avatarBorder: { borderWidth: 1, borderColor: COLORS.accent },
+  postName: { fontWeight: "bold", color: COLORS.textMain },
+  postTime: { color: COLORS.textMuted, fontSize: 11 },
   postContent: {
-    color: "#333",
+    color: COLORS.textMain,
     lineHeight: 22,
-    marginBottom: 8,
-    paddingHorizontal: 4,
+    marginBottom: 12,
+    paddingHorizontal: 2,
   },
-  postImage: { width: "100%", height: 250, borderRadius: 10, marginBottom: 4 },
-  postActions: { flexDirection: "row", alignItems: "center" },
-  actionBtn: { flexDirection: "row", alignItems: "center", marginRight: 16 },
-  actionCount: { color: "#666", fontSize: 14, marginLeft: -8 },
+  postImage: { width: "100%", height: 280, borderRadius: 12, marginBottom: 8 },
+  cardDivider: {
+    backgroundColor: "rgba(226, 232, 240, 0.05)",
+    marginVertical: 4,
+  },
+  postActions: { flexDirection: "row", alignItems: "center", paddingTop: 4 },
+  actionBtn: { flexDirection: "row", alignItems: "center", marginRight: 24 },
+  actionCount: { color: COLORS.textMuted, fontSize: 13, marginLeft: -4 },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
   },
-  emptyIcon: { fontSize: 56, marginBottom: 12 },
-  emptyText: { fontWeight: "bold", color: "#1a1a2e", textAlign: "center" },
-  emptySubtext: { color: "#888", textAlign: "center", marginTop: 8 },
+  emptyIcon: { fontSize: 64, marginBottom: 16, opacity: 0.5 },
+  emptyText: {
+    fontWeight: "bold",
+    color: COLORS.textMain,
+    textAlign: "center",
+  },
+  emptySubtext: { color: COLORS.textMuted, textAlign: "center", marginTop: 8 },
   fab: {
     position: "absolute",
-    bottom: 16,
-    right: 16,
-    borderRadius: 16,
-    backgroundColor: "#6200ee",
+    bottom: 24,
+    right: 24,
+    borderRadius: 50,
+    backgroundColor: COLORS.accent,
+    shadowColor: COLORS.accent,
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    elevation: 8,
   },
 });

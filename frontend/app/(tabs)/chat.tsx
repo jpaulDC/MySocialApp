@@ -20,13 +20,25 @@ import {
   Text,
 } from "react-native-paper";
 
-// INAYOS NA IMPORTS: Tinugma sa ChatServices.ts
+// INAYOS NA IMPORTS
 import {
   getConversation,
   markMessagesAsRead,
   ChatMessage as Message,
-  startChatConnection
+  startChatConnection,
 } from "../../services/chatService";
+
+// THEME COLORS (Match sa Home Screen mo)
+const THEME = {
+  bg: "#0A0A0A",
+  surface: "#1E293B",
+  primary: "#2563EB",
+  accent: "#00F5FF",
+  text: "#E2E8F0",
+  muted: "#94A3B8",
+  error: "#FF4B4B",
+  online: "#00FF94",
+};
 
 function formatTime(dateStr: string): string {
   if (!dateStr) return "";
@@ -50,11 +62,9 @@ export default function ChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // ── SAFETY CHECK SA PARAMS ──
   const receiverId = params.userId ? Number(params.userId) : null;
   const receiverName =
     (params.fullName as string) || (params.username as string) || "User";
-  const receiverPic = params.picture as string;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -89,7 +99,6 @@ export default function ChatScreen() {
   }, []);
 
   useEffect(() => {
-    // Huwag mag-run kung walang receiverId
     if (!myUserId || !receiverId) {
       if (!receiverId) setLoading(false);
       return;
@@ -101,14 +110,12 @@ export default function ChatScreen() {
       try {
         const history = await getConversation(receiverId);
         setMessages(history);
-
         await markMessagesAsRead(receiverId);
 
         const connection = await startChatConnection();
         activeConn = connection;
         setConn(connection);
 
-        // CLEANUP LISTENERS BAGO MAG-ATTACH (Para iwas double messages)
         connection.off("ReceivePrivateMessage");
         connection.off("UserTyping");
         connection.off("UserStoppedTyping");
@@ -152,7 +159,6 @@ export default function ChatScreen() {
 
     setupChat();
 
-    // CLEANUP FUNCTION: Tatanggalin ang listeners kapag umalis sa screen
     return () => {
       if (activeConn) {
         activeConn.off("ReceivePrivateMessage");
@@ -163,7 +169,6 @@ export default function ChatScreen() {
     };
   }, [myUserId, receiverId]);
 
-  // Auto-scroll to bottom kapag may bagong message
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
@@ -174,14 +179,12 @@ export default function ChatScreen() {
 
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
-
     if (!text || !conn || sending || !receiverId) return;
 
     setInputText("");
     setSending(true);
     try {
       await conn.invoke("SendPrivateMessage", receiverId, text);
-
       if (isTypingRef.current) {
         await conn.invoke("StopTyping", receiverId);
         isTypingRef.current = false;
@@ -239,11 +242,12 @@ export default function ChatScreen() {
               isMe ? styles.msgContentRight : styles.msgContentLeft,
             ]}
           >
-            <View
+            <Surface
               style={[
                 styles.bubble,
                 isMe ? styles.bubbleSent : styles.bubbleReceived,
               ]}
+              elevation={isMe ? 4 : 1}
             >
               <Text
                 style={[
@@ -253,30 +257,28 @@ export default function ChatScreen() {
               >
                 {item.content}
               </Text>
+            </Surface>
+            <View style={styles.timeRow}>
+              <Text style={styles.msgTime}>{formatTime(item.sentAt)}</Text>
+              {isMe && (
+                <IconButton
+                  icon={item.isRead ? "check-all" : "check"}
+                  size={12}
+                  iconColor={item.isRead ? THEME.accent : THEME.muted}
+                  style={{ margin: 0, padding: 0, height: 12, width: 12 }}
+                />
+              )}
             </View>
-            <Text style={styles.msgTime}>
-              {formatTime(item.sentAt)} {isMe && (item.isRead ? "✓✓" : "✓")}
-            </Text>
           </View>
         </View>
       </View>
     );
   };
 
-  if (!receiverId) {
-    return (
-      <View style={styles.centered}>
-        <Text variant="titleMedium" style={{ color: "#888" }}>
-          No conversation selected
-        </Text>
-      </View>
-    );
-  }
-
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6200ee" />
+      <View style={[styles.centered, { backgroundColor: THEME.bg }]}>
+        <ActivityIndicator size="large" color={THEME.accent} />
       </View>
     );
   }
@@ -285,23 +287,48 @@ export default function ChatScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
-      <Surface style={styles.header} elevation={3}>
-        <IconButton icon="arrow-left" onPress={() => router.back()} />
+      <Surface style={styles.header} elevation={4}>
+        <IconButton
+          icon="arrow-left"
+          iconColor={THEME.text}
+          onPress={() => router.back()}
+        />
         <Avatar.Text
           size={40}
           label={receiverName ? receiverName[0].toUpperCase() : "?"}
+          style={{ backgroundColor: THEME.primary }}
+          labelStyle={{ color: THEME.accent }}
         />
         <View style={styles.headerInfo}>
           <Text variant="titleMedium" style={styles.headerName}>
             {receiverName}
           </Text>
-          <Text style={{ color: isOnline ? "#4CAF50" : "#aaa", fontSize: 12 }}>
-            {isOnline ? "● Online" : "○ Offline"}
-            {isTyping && " | Typing..."}
-          </Text>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: isOnline ? THEME.online : THEME.muted },
+              ]}
+            />
+            <Text
+              style={{
+                color: isOnline ? THEME.online : THEME.muted,
+                fontSize: 11,
+                fontWeight: "bold",
+              }}
+            >
+              {isOnline ? "ONLINE" : "OFFLINE"}
+              {isTyping && " | TYPING..."}
+            </Text>
+          </View>
         </View>
+        <IconButton
+          icon="video-outline"
+          iconColor={THEME.accent}
+          onPress={() => {}}
+        />
       </Surface>
 
       <FlatList
@@ -315,18 +342,25 @@ export default function ChatScreen() {
         }
       />
 
-      <Surface style={styles.inputBar} elevation={4}>
+      <Surface style={styles.inputBar} elevation={5}>
         <PaperInput
           value={inputText}
           onChangeText={handleInputChange}
           mode="outlined"
           placeholder="Type a message..."
+          placeholderTextColor={THEME.muted}
+          textColor={THEME.text}
           style={styles.input}
-          outlineStyle={{ borderRadius: 25 }}
+          outlineStyle={{
+            borderRadius: 25,
+            borderColor: "rgba(0, 245, 255, 0.2)",
+          }}
+          activeOutlineColor={THEME.accent}
           multiline={false}
           right={
             <PaperInput.Icon
               icon="send"
+              color={inputText.trim() ? THEME.accent : THEME.muted}
               disabled={!inputText.trim() || sending}
               onPress={handleSend}
             />
@@ -338,49 +372,69 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f0f2f5" },
+  container: { flex: 1, backgroundColor: THEME.bg },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
-    paddingVertical: 6,
-    paddingRight: 15,
-    marginTop: Platform.OS === "android" ? 30 : 0,
+    backgroundColor: THEME.surface,
+    paddingVertical: 10,
+    paddingRight: 8,
+    paddingTop: Platform.OS === "ios" ? 50 : 40,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 245, 255, 0.1)",
   },
-  headerInfo: { flex: 1, marginLeft: 10 },
-  headerName: { fontWeight: "bold" },
-  messagesList: { padding: 15, paddingBottom: 20 },
-  msgRow: { flexDirection: "row", marginBottom: 10 },
+  headerInfo: { flex: 1, marginLeft: 12 },
+  headerName: { fontWeight: "bold", color: THEME.text },
+  statusRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+  messagesList: { padding: 16, paddingBottom: 20 },
+  msgRow: { flexDirection: "row", marginBottom: 16 },
   msgRowLeft: { justifyContent: "flex-start" },
   msgRowRight: { justifyContent: "flex-end" },
   msgContent: { maxWidth: "80%" },
   msgContentLeft: { alignItems: "flex-start" },
   msgContentRight: { alignItems: "flex-end" },
-  bubble: { padding: 12, borderRadius: 18 },
-  bubbleSent: { backgroundColor: "#6200ee" },
-  bubbleReceived: { backgroundColor: "white" },
-  bubbleText: { fontSize: 15 },
-  bubbleTextSent: { color: "white" },
-  bubbleTextReceived: { color: "black" },
-  msgTime: { fontSize: 10, color: "#aaa", marginTop: 2 },
+  bubble: { padding: 12, borderRadius: 18, borderTopLeftRadius: 18 },
+  bubbleSent: {
+    backgroundColor: THEME.primary,
+    borderBottomRightRadius: 2,
+    shadowColor: THEME.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  bubbleReceived: {
+    backgroundColor: THEME.surface,
+    borderBottomLeftRadius: 2,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
+  },
+  bubbleText: { fontSize: 15, lineHeight: 20 },
+  bubbleTextSent: { color: "#FFF" },
+  bubbleTextReceived: { color: THEME.text },
+  timeRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  msgTime: { fontSize: 10, color: THEME.muted },
   dateDivider: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 10,
+    marginVertical: 20,
   },
-  dateLine: { flex: 1, height: 1, backgroundColor: "#eee" },
-  dateLabel: { marginHorizontal: 10, color: "#aaa", fontSize: 12 },
+  dateLine: { flex: 1, height: 1, backgroundColor: "rgba(255, 255, 255, 0.1)" },
+  dateLabel: {
+    marginHorizontal: 10,
+    color: THEME.muted,
+    fontSize: 11,
+    fontWeight: "bold",
+  },
   inputBar: {
-    padding: 10,
-    backgroundColor: "white",
-    paddingBottom: Platform.OS === "ios" ? 25 : 10,
+    padding: 12,
+    backgroundColor: THEME.surface,
+    paddingBottom: Platform.OS === "ios" ? 30 : 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 245, 255, 0.1)",
   },
-  input: { backgroundColor: "white" },
-  quickActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    padding: 10,
+  input: {
+    backgroundColor: THEME.bg,
+    maxHeight: 50,
   },
 });

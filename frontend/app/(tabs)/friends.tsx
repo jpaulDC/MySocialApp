@@ -33,10 +33,21 @@ import {
 } from "../../services/friendService";
 import { UserProfile } from "../../services/userService";
 
+// THEME CONSTANTS
+const THEME = {
+  bg: "#0A0A0A",
+  surface: "#1E293B",
+  primary: "#2563EB",
+  accent: "#00F5FF",
+  text: "#E2E8F0",
+  muted: "#94A3B8",
+  error: "#FF4B4B",
+  success: "#10B981",
+};
+
 export default function FriendsScreen() {
   const router = useRouter();
 
-  // ── State ──────────────────────────────────────────────────────────
   const [tab, setTab] = useState("friends");
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<Friend[]>([]);
@@ -46,11 +57,9 @@ export default function FriendsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  // ── Action Modal State ─────────────────────────────────────────────
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
 
-  // ── Load Data ──────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -58,7 +67,10 @@ export default function FriendsScreen() {
       setFriends(f);
       setRequests(r);
     } catch {
-      Alert.alert("Error", "Failed to load friends.");
+      Alert.alert(
+        "System Error",
+        "Failed to bridge connection with the network.",
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -67,9 +79,8 @@ export default function FriendsScreen() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
-  // ── Search debounce ────────────────────────────────────────────────
   useEffect(() => {
     if (tab !== "search") return;
     const timer = setTimeout(async () => {
@@ -82,7 +93,7 @@ export default function FriendsScreen() {
         const res = await searchUsers(searchQuery);
         setSearchResult(res);
       } catch {
-        Alert.alert("Error", "Search failed.");
+        Alert.alert("Network Error", "User search sequence failed.");
       } finally {
         setSearching(false);
       }
@@ -90,17 +101,11 @@ export default function FriendsScreen() {
     return () => clearTimeout(timer);
   }, [searchQuery, tab]);
 
-  // ══════════════════════════════════════════════════════════════════
-  //  MODAL ACTIONS
-  // ══════════════════════════════════════════════════════════════════
-
-  // Kapag na-tap ang isang friend – ipakita ang options modal
   const handleFriendTap = (friend: Friend) => {
     setSelectedFriend(friend);
     setModalVisible(true);
   };
 
-  // Option 1: View Profile
   const handleViewProfile = () => {
     if (!selectedFriend) return;
     setModalVisible(false);
@@ -110,12 +115,9 @@ export default function FriendsScreen() {
     });
   };
 
-  // Option 2: Message – diretso sa chat
   const handleMessageFriend = () => {
     if (!selectedFriend) return;
     setModalVisible(false);
-
-    // I-navigate sa chat screen na may receiver info
     router.push({
       pathname: "/(tabs)/chat",
       params: {
@@ -127,14 +129,13 @@ export default function FriendsScreen() {
     });
   };
 
-  // ── Accept / Reject / Unfriend ─────────────────────────────────────
   const handleAccept = async (friendshipId: number) => {
     try {
       await acceptFriendRequest(friendshipId);
-      Alert.alert("✅", "Friend request accepted!");
+      Alert.alert("CONNECTED", "User has been added to your network!");
       loadData();
     } catch {
-      Alert.alert("Error", "Failed to accept.");
+      Alert.alert("Error", "Protocol failed to accept request.");
     }
   };
 
@@ -143,22 +144,22 @@ export default function FriendsScreen() {
       await rejectFriendRequest(friendshipId);
       loadData();
     } catch {
-      Alert.alert("Error", "Failed to reject.");
+      Alert.alert("Error", "Failed to terminate request.");
     }
   };
 
   const handleUnfriend = (id: number, name: string) => {
-    Alert.alert("Unfriend", `Remove ${name}?`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert("TERMINATE LINK", `Sever connection with ${name}?`, [
+      { text: "Abort", style: "cancel" },
       {
-        text: "Unfriend",
+        text: "Terminate",
         style: "destructive",
         onPress: async () => {
           try {
             await unfriend(id);
             loadData();
           } catch {
-            Alert.alert("Error", "Failed to unfriend.");
+            Alert.alert("Error", "Failed to sever link.");
           }
         },
       },
@@ -167,35 +168,38 @@ export default function FriendsScreen() {
 
   const handleSendRequest = async (userId: number, username: string) => {
     try {
-      const msg = await sendFriendRequest(userId);
-      Alert.alert("✅", msg);
+      await sendFriendRequest(userId);
+      Alert.alert("TRANSMITTED", "Friend request sent to " + username);
     } catch (e: any) {
-      Alert.alert("Error", e.response?.data?.message ?? "Failed.");
+      Alert.alert("Blocked", e.response?.data?.message ?? "Link failed.");
     }
   };
 
-  // ── Avatar helper ──────────────────────────────────────────────────
-  const renderAvatar = (item: {
-    profilePictureUrl?: string;
-    username: string;
-    fullName?: string;
-  }) => {
+  const renderAvatar = (item: any) => {
     const uri = item.profilePictureUrl
       ? `${BASE_URL}${item.profilePictureUrl}`
       : null;
-    const initials = (item.fullName ?? item.username)[0].toUpperCase();
-    return uri ? (
-      <Avatar.Image size={50} source={{ uri }} />
-    ) : (
-      <Avatar.Text size={50} label={initials} />
+    const initials = (item.fullName ?? item.username ?? "?")[0].toUpperCase();
+    return (
+      <View style={styles.avatarBorder}>
+        {uri ? (
+          <Avatar.Image
+            size={50}
+            source={{ uri }}
+            style={{ backgroundColor: THEME.bg }}
+          />
+        ) : (
+          <Avatar.Text
+            size={50}
+            label={initials}
+            style={{ backgroundColor: THEME.bg }}
+            labelStyle={{ color: THEME.accent }}
+          />
+        )}
+      </View>
     );
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  //  RENDER ITEMS
-  // ══════════════════════════════════════════════════════════════════
-
-  // ── FRIEND CARD – tap to show options ─────────────────────────────
   const renderFriend = ({ item }: { item: Friend }) => (
     <TouchableOpacity activeOpacity={0.7} onPress={() => handleFriendTap(item)}>
       <Surface style={styles.card} elevation={1}>
@@ -206,31 +210,32 @@ export default function FriendsScreen() {
               {item.fullName ?? item.username}
             </Text>
             <Text variant="bodySmall" style={styles.username}>
-              @{item.username}
-            </Text>
-            {/* Hint text */}
-            <Text variant="bodySmall" style={styles.tapHint}>
-              Tap for options
+              ID: {item.username}
             </Text>
           </View>
-
-          {/* Quick action icons */}
           <View style={styles.quickIcons}>
-            {/* Message icon */}
             <IconButton
-              icon="message-outline"
+              icon="comment-text-outline"
               size={22}
-              iconColor="#6200ee"
+              iconColor={THEME.accent}
               onPress={() => {
                 setSelectedFriend(item);
-                handleMessageFriend();
+                // We directly trigger the message push
+                router.push({
+                  pathname: "/(tabs)/chat",
+                  params: {
+                    userId: item.userId.toString(),
+                    username: item.username,
+                    fullName: item.fullName ?? item.username,
+                    picture: item.profilePictureUrl ?? "",
+                  },
+                });
               }}
             />
-            {/* More options */}
             <IconButton
               icon="dots-vertical"
               size={22}
-              iconColor="#888"
+              iconColor={THEME.muted}
               onPress={() => handleFriendTap(item)}
             />
           </View>
@@ -239,7 +244,6 @@ export default function FriendsScreen() {
     </TouchableOpacity>
   );
 
-  // ── REQUEST CARD ───────────────────────────────────────────────────
   const renderRequest = ({ item }: { item: Friend }) => (
     <Surface style={styles.card} elevation={1}>
       <View style={styles.cardRow}>
@@ -249,33 +253,32 @@ export default function FriendsScreen() {
             {item.fullName ?? item.username}
           </Text>
           <Text variant="bodySmall" style={styles.username}>
-            @{item.username}
+            INCOMING SIGNAL
           </Text>
         </View>
       </View>
       <View style={styles.requestActions}>
         <Button
           mode="contained"
-          style={[styles.requestBtn, { marginRight: 8 }]}
+          style={[styles.requestBtn, { backgroundColor: THEME.success }]}
           onPress={() => handleAccept(item.friendshipId)}
-          icon="check"
+          icon="check-bold"
         >
-          Accept
+          ACCEPT
         </Button>
         <Button
           mode="outlined"
           style={styles.requestBtn}
-          textColor="red"
+          textColor={THEME.error}
           onPress={() => handleReject(item.friendshipId)}
-          icon="close"
+          icon="close-thick"
         >
-          Decline
+          REJECT
         </Button>
       </View>
     </Surface>
   );
 
-  // ── SEARCH RESULT CARD ─────────────────────────────────────────────
   const renderSearchResult = ({ item }: { item: UserProfile }) => (
     <Surface style={styles.card} elevation={1}>
       <TouchableOpacity
@@ -296,23 +299,16 @@ export default function FriendsScreen() {
             <Text variant="bodySmall" style={styles.username}>
               @{item.username}
             </Text>
-            {item.bio ? (
-              <Text variant="bodySmall" numberOfLines={1} style={styles.bio}>
-                {item.bio}
-              </Text>
-            ) : null}
           </View>
         </View>
       </TouchableOpacity>
-
-      {/* Action buttons */}
       <View style={styles.searchActions}>
         <Button
           mode="outlined"
-          icon="message-outline"
+          icon="message"
           compact
           style={styles.searchBtn}
-          textColor="#6200ee"
+          textColor={THEME.accent}
           onPress={() =>
             router.push({
               pathname: "/(tabs)/chat",
@@ -325,77 +321,87 @@ export default function FriendsScreen() {
             })
           }
         >
-          Message
+          MESSAGE
         </Button>
         <Button
           mode="contained"
           compact
           icon="account-plus"
-          style={styles.searchBtn}
+          style={[styles.searchBtn, { backgroundColor: THEME.primary }]}
           onPress={() => handleSendRequest(item.id, item.username)}
         >
-          Add Friend
+          ADD LINK
         </Button>
       </View>
     </Surface>
   );
 
-  // ══════════════════════════════════════════════════════════════════
-  //  MAIN RENDER
-  // ══════════════════════════════════════════════════════════════════
   return (
     <View style={styles.container}>
-      {/* ── TAB SWITCHER ── */}
       <SegmentedButtons
         value={tab}
         onValueChange={setTab}
         style={styles.tabs}
+        theme={{ colors: { secondaryContainer: THEME.primary } }}
         buttons={[
           {
             value: "friends",
-            label: `Friends (${friends.length})`,
+            label: `NET (${friends.length})`,
             icon: "account-group",
+            checkedColor: "#fff",
+            uncheckedColor: THEME.muted,
           },
           {
             value: "requests",
-            label:
-              requests.length > 0
-                ? `Requests (${requests.length})`
-                : "Requests",
-            icon: "account-clock",
+            label: requests.length > 0 ? `REQS (${requests.length})` : "REQS",
+            icon: "bell-outline",
+            checkedColor: "#fff",
+            uncheckedColor: THEME.muted,
           },
           {
             value: "search",
-            label: "Search",
-            icon: "account-search",
+            label: "SEARCH",
+            icon: "magnify",
+            checkedColor: "#fff",
+            uncheckedColor: THEME.muted,
           },
         ]}
       />
 
-      {/* ── SEARCH BAR ── */}
       {tab === "search" && (
         <Searchbar
-          placeholder="Search by username or name..."
+          placeholder="Scan user database..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           style={styles.searchbar}
+          inputStyle={{ color: THEME.text }}
+          iconColor={THEME.accent}
+          placeholderTextColor={THEME.muted}
           loading={searching}
         />
       )}
 
-      {/* ── LOADING ── */}
-      {loading && (
+      {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" />
+          <ActivityIndicator size="large" color={THEME.accent} />
         </View>
-      )}
-
-      {/* ── FRIENDS TAB ── */}
-      {tab === "friends" && !loading && (
+      ) : (
         <FlatList
-          data={friends}
-          keyExtractor={(i) => i.friendshipId.toString()}
-          renderItem={renderFriend}
+          data={
+            (tab === "friends"
+              ? friends
+              : tab === "requests"
+                ? requests
+                : searchResult) as any[]
+          }
+          keyExtractor={(item: any) =>
+            (item.friendshipId || item.id || item.userId).toString()
+          }
+          renderItem={({ item }: { item: any }) => {
+            if (tab === "friends") return renderFriend({ item });
+            if (tab === "requests") return renderRequest({ item });
+            return renderSearchResult({ item });
+          }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -403,161 +409,92 @@ export default function FriendsScreen() {
                 setRefreshing(true);
                 loadData();
               }}
+              tintColor={THEME.accent}
             />
           }
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          contentContainerStyle={
-            friends.length === 0 ? { flex: 1 } : { padding: 12 }
-          }
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          contentContainerStyle={{ padding: 16 }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>👥</Text>
-              <Text variant="titleMedium" style={styles.emptyText}>
-                No friends yet
+              <Text style={styles.emptyIcon}>
+                {tab === "friends" ? "🛰️" : tab === "requests" ? "📡" : "🔍"}
               </Text>
-              <Button
-                mode="contained"
-                style={{ marginTop: 16 }}
-                onPress={() => setTab("search")}
-                icon="account-search"
-              >
-                Find Friends
-              </Button>
-            </View>
-          }
-        />
-      )}
-
-      {/* ── REQUESTS TAB ── */}
-      {tab === "requests" && !loading && (
-        <FlatList
-          data={requests}
-          keyExtractor={(i) => i.friendshipId.toString()}
-          renderItem={renderRequest}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                loadData();
-              }}
-            />
-          }
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          contentContainerStyle={
-            requests.length === 0 ? { flex: 1 } : { padding: 12 }
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📭</Text>
               <Text variant="titleMedium" style={styles.emptyText}>
-                No pending requests
+                {tab === "friends"
+                  ? "No network connections found."
+                  : tab === "requests"
+                    ? "No incoming signals."
+                    : "Awaiting scan parameters."}
               </Text>
             </View>
           }
         />
       )}
 
-      {/* ── SEARCH TAB ── */}
-      {tab === "search" && !loading && (
-        <FlatList
-          data={searchResult}
-          keyExtractor={(i) => i.id.toString()}
-          renderItem={renderSearchResult}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          contentContainerStyle={
-            searchResult.length === 0 ? { flex: 1 } : { padding: 12 }
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🔍</Text>
-              <Text variant="titleMedium" style={styles.emptyText}>
-                {searchQuery.length < 2
-                  ? "Type 2+ characters to search"
-                  : "No users found"}
-              </Text>
-            </View>
-          }
-        />
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════
-           ACTION MODAL – kapag nag-tap ng friend
-         ══════════════════════════════════════════════════════════════ */}
       <Modal
         visible={modalVisible}
         transparent
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        {/* Backdrop – tap to close */}
         <TouchableOpacity
           style={styles.modalBackdrop}
           activeOpacity={1}
           onPress={() => setModalVisible(false)}
         />
-
-        {/* Modal content */}
         <View style={styles.modalSheet}>
+          <View style={styles.modalHandle} />
           {selectedFriend && (
             <>
-              {/* Friend info header */}
               <View style={styles.modalHeader}>
                 {renderAvatar(selectedFriend)}
-                <View style={{ marginLeft: 12 }}>
-                  <Text variant="titleMedium" style={styles.modalName}>
+                <View style={{ marginLeft: 15 }}>
+                  <Text variant="headlineSmall" style={styles.modalName}>
                     {selectedFriend.fullName ?? selectedFriend.username}
                   </Text>
-                  <Text variant="bodySmall" style={styles.modalUsername}>
-                    @{selectedFriend.username}
+                  <Text variant="bodyMedium" style={{ color: THEME.accent }}>
+                    ACTIVE_CONNECTION
                   </Text>
                 </View>
               </View>
-
-              <Divider style={{ marginBottom: 12 }} />
-
-              {/* Option 1: View Profile */}
+              <Divider
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.1)",
+                  marginBottom: 15,
+                }}
+              />
               <TouchableOpacity
                 style={styles.modalOption}
                 onPress={handleViewProfile}
               >
-                <View style={styles.modalOptionIcon}>
-                  <Text style={styles.modalOptionEmoji}>👤</Text>
-                </View>
+                <IconButton
+                  icon="account-details"
+                  iconColor={THEME.accent}
+                  containerColor={THEME.bg}
+                />
                 <View>
-                  <Text variant="titleSmall" style={styles.modalOptionTitle}>
-                    View Profile
-                  </Text>
-                  <Text variant="bodySmall" style={styles.modalOptionSub}>
-                    See {selectedFriend.username}'s profile and posts
+                  <Text style={styles.modalOptionTitle}>View Profile</Text>
+                  <Text style={styles.modalOptionSub}>
+                    Access user data logs
                   </Text>
                 </View>
               </TouchableOpacity>
-
-              {/* Option 2: Message */}
               <TouchableOpacity
                 style={styles.modalOption}
                 onPress={handleMessageFriend}
               >
-                <View
-                  style={[
-                    styles.modalOptionIcon,
-                    { backgroundColor: "#f0e8ff" },
-                  ]}
-                >
-                  <Text style={styles.modalOptionEmoji}>💬</Text>
-                </View>
+                <IconButton
+                  icon="chat-processing"
+                  iconColor={THEME.accent}
+                  containerColor={THEME.bg}
+                />
                 <View>
-                  <Text variant="titleSmall" style={styles.modalOptionTitle}>
-                    Send Message
-                  </Text>
-                  <Text variant="bodySmall" style={styles.modalOptionSub}>
-                    Start a private conversation
+                  <Text style={styles.modalOptionTitle}>Direct Message</Text>
+                  <Text style={styles.modalOptionSub}>
+                    Open secure comms channel
                   </Text>
                 </View>
               </TouchableOpacity>
-
-              {/* Option 3: Unfriend */}
               <TouchableOpacity
                 style={styles.modalOption}
                 onPress={() => {
@@ -568,35 +505,20 @@ export default function FriendsScreen() {
                   );
                 }}
               >
-                <View
-                  style={[
-                    styles.modalOptionIcon,
-                    { backgroundColor: "#fff0f0" },
-                  ]}
-                >
-                  <Text style={styles.modalOptionEmoji}>❌</Text>
-                </View>
+                <IconButton
+                  icon="link-off"
+                  iconColor={THEME.error}
+                  containerColor={THEME.bg}
+                />
                 <View>
                   <Text
-                    variant="titleSmall"
-                    style={[styles.modalOptionTitle, { color: "#e74c3c" }]}
+                    style={[styles.modalOptionTitle, { color: THEME.error }]}
                   >
-                    Unfriend
+                    Sever Connection
                   </Text>
-                  <Text variant="bodySmall" style={styles.modalOptionSub}>
-                    Remove from friends list
-                  </Text>
+                  <Text style={styles.modalOptionSub}>Remove from network</Text>
                 </View>
               </TouchableOpacity>
-
-              {/* Cancel button */}
-              <Button
-                mode="outlined"
-                onPress={() => setModalVisible(false)}
-                style={styles.cancelBtn}
-              >
-                Cancel
-              </Button>
             </>
           )}
         </View>
@@ -605,161 +527,71 @@ export default function FriendsScreen() {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════
-//  STYLES
-// ══════════════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f0f2f5",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  tabs: {
-    margin: 12,
-  },
+  container: { flex: 1, backgroundColor: THEME.bg },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  tabs: { margin: 16, backgroundColor: THEME.surface, borderRadius: 12 },
   searchbar: {
-    marginHorizontal: 12,
-    marginBottom: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
     borderRadius: 12,
+    backgroundColor: THEME.surface,
   },
-
-  // ── CARDS ─────────────────────────────────────────────────────────
   card: {
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: THEME.surface,
+    borderLeftWidth: 4,
+    borderLeftColor: THEME.primary,
   },
-  cardRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  cardRow: { flexDirection: "row", alignItems: "center" },
+  cardInfo: { flex: 1, marginLeft: 16 },
+  avatarBorder: {
+    borderRadius: 30,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: THEME.accent,
   },
-  cardInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  name: {
-    fontWeight: "bold",
-    color: "#1a1a2e",
-  },
-  username: {
-    color: "#888",
-  },
-  bio: {
-    color: "#666",
-    marginTop: 2,
-  },
-  tapHint: {
-    color: "#bbb",
-    fontSize: 11,
-    marginTop: 2,
-  },
-  quickIcons: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  // ── REQUEST ACTIONS ───────────────────────────────────────────────
-  requestActions: {
-    flexDirection: "row",
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-  },
-  requestBtn: {
-    flex: 1,
-    borderRadius: 8,
-  },
-
-  // ── SEARCH ACTIONS ────────────────────────────────────────────────
-  searchActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-  },
-  searchBtn: {
-    flex: 1,
-    borderRadius: 8,
-  },
-
-  // ── EMPTY STATE ───────────────────────────────────────────────────
+  name: { fontWeight: "bold", color: THEME.text },
+  username: { color: THEME.muted, fontSize: 12 },
+  quickIcons: { flexDirection: "row" },
+  requestActions: { flexDirection: "row", marginTop: 15, gap: 10 },
+  requestBtn: { flex: 1, borderRadius: 8 },
+  searchActions: { flexDirection: "row", gap: 10, marginTop: 15 },
+  searchBtn: { flex: 1, borderRadius: 8 },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 32,
+    marginTop: 100,
   },
-  emptyIcon: {
-    fontSize: 56,
-    marginBottom: 12,
-  },
-  emptyText: {
-    fontWeight: "bold",
-    color: "#1a1a2e",
-    textAlign: "center",
-  },
-
-  // ── ACTION MODAL ──────────────────────────────────────────────────
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
+  emptyIcon: { fontSize: 60, marginBottom: 20 },
+  emptyText: { color: THEME.muted, textAlign: "center", letterSpacing: 1 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)" },
   modalSheet: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: 36,
-    gap: 4,
+    backgroundColor: THEME.surface,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 25,
+    borderTopWidth: 2,
+    borderTopColor: THEME.accent,
   },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: THEME.muted,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 20,
   },
-  modalName: {
-    fontWeight: "bold",
-    color: "#1a1a2e",
-  },
-  modalUsername: {
-    color: "#888",
-  },
+  modalHeader: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
+  modalName: { fontWeight: "bold", color: THEME.text },
   modalOption: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    gap: 14,
+    paddingVertical: 10,
+    gap: 10,
   },
-  modalOptionIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#f0f4ff",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalOptionEmoji: {
-    fontSize: 22,
-  },
-  modalOptionTitle: {
-    fontWeight: "600",
-    color: "#1a1a2e",
-  },
-  modalOptionSub: {
-    color: "#888",
-    marginTop: 2,
-  },
-  cancelBtn: {
-    marginTop: 8,
-    borderRadius: 12,
-  },
+  modalOptionTitle: { fontWeight: "bold", color: THEME.text, fontSize: 16 },
+  modalOptionSub: { color: THEME.muted, fontSize: 12 },
 });

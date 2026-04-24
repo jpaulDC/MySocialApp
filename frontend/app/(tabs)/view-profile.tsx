@@ -1,30 +1,42 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    View,
+  Alert,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Button,
-    Chip,
-    Divider,
-    IconButton,
-    Surface,
-    Text,
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Chip,
+  Divider,
+  IconButton,
+  Surface,
+  Text,
 } from "react-native-paper";
 import { BASE_URL } from "../../services/chatService";
 import {
-    getFriendshipStatus,
-    sendFriendRequest,
-    unfriend,
+  getFriendshipStatus,
+  sendFriendRequest,
+  unfriend,
 } from "../../services/friendService";
 import { getUserPosts, Post } from "../../services/postService";
 import { getProfileById, UserProfile } from "../../services/userService";
+
+// ── THEME CONSTANTS ────────────────────────────────────────────────────
+const THEME = {
+  bg: "#000000",
+  card: "#1A222E",
+  primary: "#2563EB",
+  accent: "#00F5FF",
+  text: "#FFFFFF",
+  muted: "#94A3B8",
+  danger: "#E74C3C",
+};
 
 export default function ViewProfileScreen() {
   const router = useRouter();
@@ -39,6 +51,7 @@ export default function ViewProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [friendLoading, setFriendLoading] = useState(false);
 
+  // LOGIC REMAINS UNTOUCHED
   const loadAll = useCallback(async () => {
     try {
       const [profileData, postsData, statusData] = await Promise.all([
@@ -62,7 +75,6 @@ export default function ViewProfileScreen() {
     loadAll();
   }, []);
 
-  // ── Message button → diretso sa chat ──────────────────────────────
   const handleMessage = () => {
     if (!profile) return;
     router.push({
@@ -76,7 +88,6 @@ export default function ViewProfileScreen() {
     });
   };
 
-  // ── Friend actions ─────────────────────────────────────────────────
   const handleFriendAction = async () => {
     setFriendLoading(true);
     try {
@@ -112,7 +123,7 @@ export default function ViewProfileScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={THEME.accent} />
       </View>
     );
   }
@@ -130,12 +141,12 @@ export default function ViewProfileScreen() {
 
   const friendLabel =
     friendStatus === "None"
-      ? "Add Friend"
+      ? "ADD FRIEND"
       : friendStatus === "Pending"
-        ? "Request Sent"
+        ? "REQUESTED"
         : friendStatus === "Accepted"
-          ? "Friends ✓"
-          : "Add Friend";
+          ? "FRIENDS ✓"
+          : "ADD FRIEND";
 
   return (
     <ScrollView
@@ -143,6 +154,7 @@ export default function ViewProfileScreen() {
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
+          tintColor={THEME.accent}
           onRefresh={() => {
             setRefreshing(true);
             loadAll();
@@ -150,118 +162,129 @@ export default function ViewProfileScreen() {
         />
       }
     >
-      {/* ── Back ── */}
       <View style={styles.backRow}>
-        <IconButton icon="arrow-left" size={24} onPress={() => router.back()} />
+        <IconButton
+          icon="arrow-left"
+          iconColor={THEME.text}
+          size={24}
+          onPress={() => router.back()}
+        />
       </View>
 
-      {/* ── Profile Card ── */}
-      <Surface style={styles.profileCard} elevation={2}>
+      {/* ── PROFILE BOX ── */}
+      <Surface style={styles.profileCard} elevation={4}>
+        <View style={styles.sideAccent} />
         <View style={styles.avatarContainer}>
           {avatarUri ? (
-            <Avatar.Image size={96} source={{ uri: avatarUri }} />
+            <Avatar.Image
+              size={100}
+              source={{ uri: avatarUri }}
+              style={styles.avatarGlow}
+            />
           ) : (
-            <Avatar.Text size={96} label={initials} />
+            <Avatar.Text
+              size={100}
+              label={initials}
+              style={{ backgroundColor: THEME.primary }}
+            />
           )}
         </View>
 
-        <Text variant="headlineSmall" style={styles.fullName}>
+        <Text style={styles.fullName}>
           {profile?.fullName ?? profile?.username}
         </Text>
-        <Text variant="bodyMedium" style={styles.username}>
-          @{profile?.username}
-        </Text>
+        <Text style={styles.username}>@{profile?.username}</Text>
 
         {profile?.bio ? (
           <Text style={styles.bio}>{profile.bio}</Text>
         ) : (
-          <Text style={styles.noBio}>No bio yet.</Text>
+          <Text style={styles.noBio}>No bio available.</Text>
         )}
 
-        <Chip icon="calendar" style={styles.chip}>
-          Joined {new Date(profile?.createdAt ?? "").toLocaleDateString()}
+        <Chip
+          icon="calendar"
+          style={styles.chip}
+          textStyle={{ color: THEME.accent, fontSize: 11 }}
+        >
+          JOINED {new Date(profile?.createdAt ?? "").getFullYear()}
         </Chip>
 
-        <Divider style={{ width: "100%", marginVertical: 16 }} />
+        <Divider style={styles.darkDivider} />
 
-        {/* ── ACTION BUTTONS ── */}
         <View style={styles.actionRow}>
-          {/* 💬 MESSAGE BUTTON */}
           <Button
             mode="contained"
-            icon="message"
+            icon="message-outline"
             onPress={handleMessage}
-            style={[styles.actionBtn, { backgroundColor: "#6200ee" }]}
-            contentStyle={styles.actionBtnContent}
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: THEME.card,
+                borderWidth: 1,
+                borderColor: THEME.primary,
+              },
+            ]}
+            labelStyle={{ color: THEME.text, fontWeight: "bold" }}
           >
-            Message
+            MESSAGE
           </Button>
 
-          {/* 👤 FRIEND BUTTON */}
           <Button
-            mode={friendStatus === "Accepted" ? "outlined" : "contained"}
+            mode="contained"
             icon={
-              friendStatus === "None"
-                ? "account-plus"
-                : friendStatus === "Pending"
-                  ? "account-clock"
-                  : "account-check"
+              friendStatus === "Accepted" ? "account-check" : "account-plus"
             }
             onPress={handleFriendAction}
             loading={friendLoading}
             disabled={friendLoading || friendStatus === "Pending"}
             style={styles.actionBtn}
-            contentStyle={styles.actionBtnContent}
-            textColor={friendStatus === "Accepted" ? "#4CAF50" : undefined}
+            buttonColor={friendStatus === "Accepted" ? "#10B981" : THEME.accent}
+            textColor="#000"
+            labelStyle={{ fontWeight: "bold" }}
           >
             {friendLabel}
           </Button>
         </View>
       </Surface>
 
-      {/* ── Stats Row ── */}
-      <Surface style={styles.statsRow} elevation={1}>
+      {/* ── STATS BOX ── */}
+      <Surface style={styles.statsRow} elevation={2}>
         <View style={styles.statItem}>
-          <Text variant="titleLarge" style={styles.statNum}>
-            {posts.length}
-          </Text>
-          <Text variant="bodySmall" style={styles.statLabel}>
-            Posts
-          </Text>
+          <Text style={styles.statNum}>{posts.length}</Text>
+          <Text style={styles.statLabel}>POSTS</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text variant="titleLarge" style={styles.statNum}>
-            {friendStatus === "Accepted" ? "✓" : "—"}
+          <Text style={styles.statNum}>
+            {friendStatus === "Accepted" ? "YES" : "NO"}
           </Text>
-          <Text variant="bodySmall" style={styles.statLabel}>
-            Friend
-          </Text>
+          <Text style={styles.statLabel}>FRIEND</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text variant="titleLarge" style={styles.statNum}>
+          <Text style={styles.statNum}>
             {posts.reduce((s, p) => s + p.likeCount, 0)}
           </Text>
-          <Text variant="bodySmall" style={styles.statLabel}>
-            Likes
-          </Text>
+          <Text style={styles.statLabel}>LIKES</Text>
         </View>
       </Surface>
 
-      {/* ── Posts ── */}
+      {/* ── POSTS LIST ── */}
       <View style={styles.postsSection}>
-        <Text variant="titleMedium" style={styles.postsTitle}>
-          📝 Posts
-        </Text>
+        <Text style={styles.postsTitle}>USER_TIMELINE</Text>
         {posts.length === 0 ? (
           <Surface style={styles.emptyPosts} elevation={1}>
-            <Text style={{ fontSize: 32 }}>📭</Text>
-            <Text style={{ color: "#888", marginTop: 8 }}>No posts yet.</Text>
+            <Text style={{ fontSize: 40 }}>📁</Text>
+            <Text
+              style={{ color: THEME.muted, marginTop: 10, fontWeight: "bold" }}
+            >
+              NO_POSTS_YET
+            </Text>
           </Surface>
         ) : (
           posts.map((post) => (
-            <Surface key={post.id} style={styles.postCard} elevation={1}>
+            <Surface key={post.id} style={styles.postCard} elevation={2}>
+              <View style={styles.postBoxAccent} />
               {post.content ? (
                 <Text style={styles.postContent}>{post.content}</Text>
               ) : null}
@@ -282,59 +305,141 @@ export default function ViewProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f0f2f5" },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  backRow: { paddingTop: 8, paddingLeft: 4 },
+  container: { flex: 1, backgroundColor: THEME.bg },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: THEME.bg,
+  },
+  backRow: { paddingTop: Platform.OS === "ios" ? 50 : 10, paddingLeft: 10 },
+
   profileCard: {
     alignItems: "center",
-    margin: 12,
-    marginTop: 0,
-    padding: 20,
-    borderRadius: 16,
-    backgroundColor: "white",
+    margin: 16,
+    padding: 24,
+    borderRadius: 25,
+    backgroundColor: THEME.card,
+    position: "relative",
+    overflow: "hidden",
   },
-  avatarContainer: { marginBottom: 12 },
-  fullName: { fontWeight: "bold", color: "#1a1a2e", textAlign: "center" },
-  username: { color: "#888", marginBottom: 8 },
+  sideAccent: {
+    position: "absolute",
+    left: 0,
+    top: 30,
+    bottom: 30,
+    width: 5,
+    backgroundColor: THEME.accent,
+    borderTopRightRadius: 5,
+    borderBottomRightRadius: 5,
+  },
+  avatarContainer: { marginBottom: 15 },
+  avatarGlow: { borderWidth: 2, borderColor: THEME.accent },
+
+  fullName: {
+    fontWeight: "900",
+    color: THEME.text,
+    fontSize: 22,
+    letterSpacing: 1,
+  },
+  username: { color: THEME.accent, marginBottom: 12, fontWeight: "bold" },
   bio: {
     textAlign: "center",
-    color: "#444",
-    marginVertical: 8,
-    paddingHorizontal: 16,
+    color: "#D1D5DB",
+    lineHeight: 20,
+    marginBottom: 15,
+    paddingHorizontal: 10,
   },
-  noBio: { color: "#bbb", fontStyle: "italic", marginVertical: 8 },
-  chip: { marginTop: 8, backgroundColor: "#e8f4ff" },
-  actionRow: { flexDirection: "row", gap: 10, width: "100%" },
-  actionBtn: { flex: 1, borderRadius: 10 },
-  actionBtnContent: { paddingVertical: 4 },
+  noBio: { color: THEME.muted, fontStyle: "italic", marginBottom: 15 },
+  chip: {
+    backgroundColor: "rgba(0, 245, 255, 0.1)",
+    borderRadius: 8,
+    height: 30,
+  },
+
+  darkDivider: {
+    width: "100%",
+    height: 1,
+    backgroundColor: "#2D3748",
+    marginVertical: 20,
+  },
+
+  actionRow: { flexDirection: "row", gap: 12, width: "100%" },
+  actionBtn: {
+    flex: 1,
+    borderRadius: 12,
+    height: 48,
+    justifyContent: "center",
+  },
+
   statsRow: {
     flexDirection: "row",
-    marginHorizontal: 12,
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: "white",
-    marginBottom: 12,
+    marginHorizontal: 16,
+    borderRadius: 20,
+    padding: 20,
+    backgroundColor: THEME.card,
+    marginBottom: 20,
   },
   statItem: { flex: 1, alignItems: "center" },
-  statNum: { fontWeight: "bold", color: "#1a1a2e" },
-  statLabel: { color: "#888", marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: "#eee" },
-  postsSection: { paddingHorizontal: 12, paddingBottom: 24, gap: 8 },
-  postsTitle: { fontWeight: "bold", color: "#1a1a2e", marginBottom: 4 },
-  postCard: { borderRadius: 12, padding: 14, backgroundColor: "white", gap: 8 },
-  postContent: { color: "#333", lineHeight: 22 },
+  statNum: { fontWeight: "900", color: THEME.text, fontSize: 18 },
+  statLabel: {
+    color: THEME.muted,
+    fontSize: 10,
+    marginTop: 4,
+    letterSpacing: 1,
+    fontWeight: "bold",
+  },
+  statDivider: { width: 1, backgroundColor: "#2D3748" },
+
+  postsSection: { paddingHorizontal: 16, paddingBottom: 40 },
+  postsTitle: {
+    fontWeight: "bold",
+    color: THEME.accent,
+    marginBottom: 15,
+    letterSpacing: 2,
+    fontSize: 14,
+  },
+
+  postCard: {
+    borderRadius: 20,
+    padding: 16,
+    backgroundColor: THEME.card,
+    marginBottom: 12,
+    position: "relative",
+    overflow: "hidden",
+  },
+  postBoxAccent: {
+    position: "absolute",
+    left: 0,
+    top: 15,
+    bottom: 15,
+    width: 3,
+    backgroundColor: THEME.primary,
+  },
+  postContent: {
+    color: "#E5E7EB",
+    lineHeight: 22,
+    fontSize: 15,
+    marginLeft: 8,
+  },
   postMeta: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginTop: 15,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    paddingTop: 8,
+    borderTopColor: "#2D3748",
+    marginLeft: 8,
   },
-  postMetaText: { color: "#888", fontSize: 12 },
+  postMetaText: { color: THEME.muted, fontSize: 11, fontWeight: "bold" },
+
   emptyPosts: {
-    borderRadius: 12,
-    padding: 32,
-    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 40,
+    backgroundColor: THEME.card,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#2D3748",
+    borderStyle: "dashed",
   },
 });

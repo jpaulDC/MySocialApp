@@ -36,7 +36,7 @@ export default function TabLayout() {
         },
       }}
     >
-      {/* ── HOME (Ito na yung main feed mo) ── */}
+      {/* ── HOME ── */}
       <Tabs.Screen
         name="index"
         options={{
@@ -81,6 +81,23 @@ export default function TabLayout() {
         }}
       />
 
+      {/* ── INBOX (Pinalit natin sa Reels o Profile base sa gusto mo) ── */}
+      <Tabs.Screen
+        name="inbox"
+        options={{
+          title: "Inbox",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={
+                focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"
+              }
+              size={26}
+              color={color}
+            />
+          ),
+        }}
+      />
+
       {/* ── PROFILE ── */}
       <Tabs.Screen
         name="profile"
@@ -96,11 +113,12 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ── HIDDEN SCREENS (Hindi lalabas sa bottom bar) ── */}
+      {/* ── HIDDEN SCREENS ── */}
+      {/* Idinagdag ang view-profile sa hidden list */}
+      <Tabs.Screen name="view-profile" options={{ href: null }} />
       <Tabs.Screen name="home" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
       <Tabs.Screen name="chat" options={{ href: null }} />
-      <Tabs.Screen name="inbox" options={{ href: null }} />
       <Tabs.Screen name="post-detail" options={{ href: null }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
       <Tabs.Screen name="create-post" options={{ href: null }} />
