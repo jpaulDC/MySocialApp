@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from "react-native";
 import {
@@ -24,6 +26,7 @@ import {
   sendFriendRequest,
   unfriend,
 } from "../../services/friendService";
+import { toggleLike } from "../../services/likeCommentService"; // Import natin ito
 import { getUserPosts, Post } from "../../services/postService";
 import { getProfileById, UserProfile } from "../../services/userService";
 
@@ -38,6 +41,120 @@ const THEME = {
   danger: "#E74C3C",
 };
 
+// ── SUB-COMPONENT: INTERACTIVE POST CARD ──────────────────────────────
+const OtherUserPostItem = memo(({ item, profile, router }: any) => {
+  const [liked, setLiked] = useState(item.isLikedByMe);
+  const [likeCount, setLikeCount] = useState(item.likeCount);
+
+  // Sync state kung mag-refresh ang data
+  useEffect(() => {
+    setLiked(item.isLikedByMe);
+    setLikeCount(item.likeCount);
+  }, [item.isLikedByMe, item.likeCount]);
+
+  const handleLike = async () => {
+    const wasLiked = liked;
+    const prevCount = likeCount;
+    setLiked(!wasLiked);
+    setLikeCount(wasLiked ? likeCount - 1 : likeCount + 1);
+
+    try {
+      const res = await toggleLike(item.id);
+      setLiked(res.isLiked);
+      setLikeCount(res.likeCount);
+    } catch {
+      setLiked(wasLiked);
+      setLikeCount(prevCount);
+      Alert.alert("Error", "Could not update like.");
+    }
+  };
+
+  const goToDetail = () => {
+    router.push({
+      pathname: "/(tabs)/post-detail",
+      params: {
+        postId: item.id.toString(),
+        post: JSON.stringify(item),
+      },
+    });
+  };
+
+  const avatarUri = profile?.profilePictureUrl
+    ? `${BASE_URL}${profile.profilePictureUrl}`
+    : null;
+  const initials = profile?.fullName?.[0] ?? "?";
+
+  return (
+    <Surface style={styles.postCard} elevation={2}>
+      <View style={styles.postBoxAccent} />
+
+      {/* HEADER */}
+      <View style={styles.postHeader}>
+        {avatarUri ? (
+          <Avatar.Image
+            size={38}
+            source={{ uri: avatarUri }}
+            style={styles.postAvatar}
+          />
+        ) : (
+          <Avatar.Text
+            size={38}
+            label={initials}
+            style={{ backgroundColor: THEME.primary }}
+          />
+        )}
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={styles.postName}>
+            {profile?.fullName ?? profile?.username}
+          </Text>
+          <Text style={styles.postDate}>
+            @{profile?.username} •{" "}
+            {new Date(item.createdAt).toLocaleDateString()}
+          </Text>
+        </View>
+      </View>
+
+      {/* CONTENT */}
+      <TouchableOpacity onPress={goToDetail} activeOpacity={0.9}>
+        {item.content && (
+          <Text style={styles.postContentText}>{item.content}</Text>
+        )}
+        {item.imageUrl && (
+          <Image
+            source={{ uri: `${BASE_URL}${item.imageUrl}` }}
+            style={styles.postImage}
+            resizeMode="cover"
+          />
+        )}
+      </TouchableOpacity>
+
+      {/* ACTIONS (LIKE & COMMENT) */}
+      <View style={styles.postActionsRow}>
+        <TouchableOpacity style={styles.actionBtnIcon} onPress={handleLike}>
+          <IconButton
+            icon={liked ? "heart" : "heart-outline"}
+            size={20}
+            iconColor={liked ? THEME.danger : THEME.muted}
+          />
+          <Text style={[styles.actionCount, liked && { color: THEME.danger }]}>
+            {likeCount}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionBtnIcon} onPress={goToDetail}>
+          <IconButton
+            icon="comment-outline"
+            size={20}
+            iconColor={THEME.muted}
+          />
+          <Text style={styles.actionCount}>{item.commentCount}</Text>
+        </TouchableOpacity>
+      </View>
+    </Surface>
+  );
+});
+
+// ── MAIN SCREEN ────────────────────────────────────────────────────────
 export default function ViewProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -51,7 +168,6 @@ export default function ViewProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [friendLoading, setFriendLoading] = useState(false);
 
-  // LOGIC REMAINS UNTOUCHED
   const loadAll = useCallback(async () => {
     try {
       const [profileData, postsData, statusData] = await Promise.all([
@@ -73,7 +189,7 @@ export default function ViewProfileScreen() {
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [loadAll]);
 
   const handleMessage = () => {
     if (!profile) return;
@@ -128,25 +244,13 @@ export default function ViewProfileScreen() {
     );
   }
 
-  const avatarUri = profile?.profilePictureUrl
-    ? `${BASE_URL}${profile.profilePictureUrl}`
-    : null;
   const initials = profile?.fullName
     ? profile.fullName
         .split(" ")
         .map((n) => n[0])
         .join("")
         .toUpperCase()
-    : (profile?.username?.[0]?.toUpperCase() ?? "?");
-
-  const friendLabel =
-    friendStatus === "None"
-      ? "ADD FRIEND"
-      : friendStatus === "Pending"
-        ? "REQUESTED"
-        : friendStatus === "Accepted"
-          ? "FRIENDS ✓"
-          : "ADD FRIEND";
+    : "?";
 
   return (
     <ScrollView
@@ -171,14 +275,14 @@ export default function ViewProfileScreen() {
         />
       </View>
 
-      {/* ── PROFILE BOX ── */}
+      {/* PROFILE INFO BOX */}
       <Surface style={styles.profileCard} elevation={4}>
         <View style={styles.sideAccent} />
         <View style={styles.avatarContainer}>
-          {avatarUri ? (
+          {profile?.profilePictureUrl ? (
             <Avatar.Image
               size={100}
-              source={{ uri: avatarUri }}
+              source={{ uri: `${BASE_URL}${profile.profilePictureUrl}` }}
               style={styles.avatarGlow}
             />
           ) : (
@@ -194,11 +298,10 @@ export default function ViewProfileScreen() {
           {profile?.fullName ?? profile?.username}
         </Text>
         <Text style={styles.username}>@{profile?.username}</Text>
-
         {profile?.bio ? (
           <Text style={styles.bio}>{profile.bio}</Text>
         ) : (
-          <Text style={styles.noBio}>No bio available.</Text>
+          <Text style={styles.noBio}>// No bio available</Text>
         )}
 
         <Chip
@@ -228,7 +331,6 @@ export default function ViewProfileScreen() {
           >
             MESSAGE
           </Button>
-
           <Button
             mode="contained"
             icon={
@@ -242,12 +344,16 @@ export default function ViewProfileScreen() {
             textColor="#000"
             labelStyle={{ fontWeight: "bold" }}
           >
-            {friendLabel}
+            {friendStatus === "None"
+              ? "ADD FRIEND"
+              : friendStatus === "Pending"
+                ? "REQUESTED"
+                : "FRIENDS ✓"}
           </Button>
         </View>
       </Surface>
 
-      {/* ── STATS BOX ── */}
+      {/* STATS SECTION */}
       <Surface style={styles.statsRow} elevation={2}>
         <View style={styles.statItem}>
           <Text style={styles.statNum}>{posts.length}</Text>
@@ -255,10 +361,8 @@ export default function ViewProfileScreen() {
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNum}>
-            {friendStatus === "Accepted" ? "YES" : "NO"}
-          </Text>
-          <Text style={styles.statLabel}>FRIEND</Text>
+          <Text style={styles.statNum}>{profile?.friendCount ?? 0}</Text>
+          <Text style={styles.statLabel}>FRIENDS</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
@@ -269,7 +373,7 @@ export default function ViewProfileScreen() {
         </View>
       </Surface>
 
-      {/* ── POSTS LIST ── */}
+      {/* TIMELINE */}
       <View style={styles.postsSection}>
         <Text style={styles.postsTitle}>USER_TIMELINE</Text>
         {posts.length === 0 ? (
@@ -283,20 +387,12 @@ export default function ViewProfileScreen() {
           </Surface>
         ) : (
           posts.map((post) => (
-            <Surface key={post.id} style={styles.postCard} elevation={2}>
-              <View style={styles.postBoxAccent} />
-              {post.content ? (
-                <Text style={styles.postContent}>{post.content}</Text>
-              ) : null}
-              <View style={styles.postMeta}>
-                <Text style={styles.postMetaText}>
-                  ❤️ {post.likeCount} 💬 {post.commentCount}
-                </Text>
-                <Text style={styles.postMetaText}>
-                  {new Date(post.createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-            </Surface>
+            <OtherUserPostItem
+              key={post.id}
+              item={post}
+              profile={profile}
+              router={router}
+            />
           ))
         )}
       </View>
@@ -313,7 +409,6 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.bg,
   },
   backRow: { paddingTop: Platform.OS === "ios" ? 50 : 10, paddingLeft: 10 },
-
   profileCard: {
     alignItems: "center",
     margin: 16,
@@ -335,7 +430,6 @@ const styles = StyleSheet.create({
   },
   avatarContainer: { marginBottom: 15 },
   avatarGlow: { borderWidth: 2, borderColor: THEME.accent },
-
   fullName: {
     fontWeight: "900",
     color: THEME.text,
@@ -356,14 +450,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     height: 30,
   },
-
   darkDivider: {
     width: "100%",
     height: 1,
     backgroundColor: "#2D3748",
     marginVertical: 20,
   },
-
   actionRow: { flexDirection: "row", gap: 12, width: "100%" },
   actionBtn: {
     flex: 1,
@@ -371,7 +463,6 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: "center",
   },
-
   statsRow: {
     flexDirection: "row",
     marginHorizontal: 16,
@@ -390,7 +481,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   statDivider: { width: 1, backgroundColor: "#2D3748" },
-
   postsSection: { paddingHorizontal: 16, paddingBottom: 40 },
   postsTitle: {
     fontWeight: "bold",
@@ -399,7 +489,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontSize: 14,
   },
-
+  // POST ITEM STYLES
   postCard: {
     borderRadius: 20,
     padding: 16,
@@ -416,23 +506,43 @@ const styles = StyleSheet.create({
     width: 3,
     backgroundColor: THEME.primary,
   },
-  postContent: {
+  postHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    marginLeft: 8,
+  },
+  postAvatar: { borderWidth: 1, borderColor: THEME.accent },
+  postName: { fontWeight: "bold", color: THEME.text, fontSize: 13 },
+  postDate: { color: THEME.muted, fontSize: 11 },
+  postContentText: {
     color: "#E5E7EB",
     lineHeight: 22,
     fontSize: 15,
     marginLeft: 8,
+    marginBottom: 8,
   },
-  postMeta: {
+  postImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  postActionsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 15,
-    paddingTop: 12,
+    marginTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: "#2D3748",
     marginLeft: 8,
   },
-  postMetaText: { color: THEME.muted, fontSize: 11, fontWeight: "bold" },
-
+  actionBtnIcon: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 25,
+  },
+  actionCount: { color: THEME.muted, fontSize: 12, marginLeft: -5 },
   emptyPosts: {
     borderRadius: 20,
     padding: 40,

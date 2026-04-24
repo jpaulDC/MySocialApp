@@ -1,40 +1,44 @@
 ﻿import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Button,
-    Divider,
-    IconButton,
-    Surface,
-    Text,
-    TextInput,
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Divider,
+  IconButton,
+  Surface,
+  Text,
+  TextInput,
 } from "react-native-paper";
+
+// DINAGDAG NA IMPORTS PARA SA TOKEN AT DECODE
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { jwtDecode } from "jwt-decode";
+
 import {
-    Comment,
-    addComment,
-    deleteComment,
-    getComments,
-    toggleLike,
+  Comment,
+  addComment,
+  deleteComment,
+  getComments,
+  toggleLike,
 } from "../../services/likeCommentService";
-import { Post, getPostById } from "../../services/postService";
+import { Post, deletePost, getPostById } from "../../services/postService";
 
 const BASE_URL = "http://192.168.1.105:5261";
 
-// ── THEME CONSTANTS ────────────────────────────────────────────────────
 const THEME = {
   bg: "#000000",
-  card: "#1A222E", // Ang box style na gusto mo
+  card: "#1A222E",
   primary: "#2563EB",
   accent: "#00F5FF",
   text: "#FFFFFF",
@@ -66,9 +70,29 @@ export default function PostDetailScreen() {
 
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [myUserId, setMyUserId] = useState<number | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
-  // LOGIC REMAINS UNTOUCHED
+  // EFFECT PARA MAKUHA ANG USER ID MULA SA TOKEN
+  useEffect(() => {
+    const getMyId = async () => {
+      const token = await AsyncStorage.getItem("token");
+      if (token) {
+        try {
+          const decoded: any = jwtDecode(token);
+          const id =
+            decoded[
+              "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+            ];
+          setMyUserId(Number(id));
+        } catch (e) {
+          console.log("Token decode error", e);
+        }
+      }
+    };
+    getMyId();
+  }, []);
+
   useEffect(() => {
     const fetchPostData = async () => {
       try {
@@ -83,7 +107,6 @@ export default function PostDetailScreen() {
           }
         }
         if (!currentPost && postId) {
-          console.log("Fetching fresh data for Post ID:", postId);
           currentPost = await getPostById(Number(postId));
         }
         if (currentPost) {
@@ -121,7 +144,7 @@ export default function PostDetailScreen() {
 
   const handleSubmitComment = async () => {
     if (!post) {
-      Alert.alert("Error", "Post data not found. Please refresh.");
+      Alert.alert("Error", "Post data not found.");
       return;
     }
     const text = newComment.trim();
@@ -135,7 +158,6 @@ export default function PostDetailScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 300);
     } catch (error) {
-      console.error("Comment Error:", error);
       Alert.alert("Error", "Failed to post comment.");
     } finally {
       setSubmitting(false);
@@ -160,6 +182,27 @@ export default function PostDetailScreen() {
     ]);
   };
 
+  const handleDeletePost = () => {
+    if (!post) return;
+    Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deletePost(post.id);
+            Alert.alert("Deleted!", "Your post has been removed.", [
+              { text: "OK", onPress: () => router.replace("/(tabs)/home") },
+            ]);
+          } catch {
+            Alert.alert("Error", "Failed to delete post.");
+          }
+        },
+      },
+    ]);
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -174,10 +217,7 @@ export default function PostDetailScreen() {
   if (!post) {
     return (
       <View style={styles.centered}>
-        <Text
-          variant="headlineSmall"
-          style={{ color: THEME.danger, fontWeight: "bold" }}
-        >
+        <Text style={{ color: THEME.danger, fontWeight: "bold", fontSize: 18 }}>
           Data Lost
         </Text>
         <Button
@@ -217,6 +257,16 @@ export default function PostDetailScreen() {
               @{post.username} • {timeAgo(post.createdAt)}
             </Text>
           </View>
+
+          {/* DITO IN-ADD ANG USER ID CHECK PARA SA DELETE BUTTON */}
+          {post?.userId === myUserId && (
+            <IconButton
+              icon="delete-outline"
+              size={22}
+              iconColor={THEME.danger}
+              onPress={handleDeletePost}
+            />
+          )}
         </View>
 
         {post.content ? (
@@ -272,7 +322,6 @@ export default function PostDetailScreen() {
 
   const renderComment = ({ item }: { item: Comment }) => {
     const commentName = item.fullName ?? item.username ?? "User";
-    const initials = commentName[0]?.toUpperCase() ?? "?";
     return (
       <View style={styles.commentBoxWrapper}>
         <View style={styles.commentCard}>
@@ -284,7 +333,8 @@ export default function PostDetailScreen() {
             </View>
             <Text style={styles.commentText}>{item.content}</Text>
           </View>
-          {item.isMyComment && (
+          {/* Kung gusto mo rin lagyan ng check ang comments: */}
+          {item.userId === myUserId && (
             <IconButton
               icon="delete-outline"
               size={18}
@@ -306,7 +356,13 @@ export default function PostDetailScreen() {
         <IconButton
           icon="arrow-left"
           iconColor={THEME.text}
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back(); // Babalik kung saan siya galing (Profile or Home)
+            } else {
+              router.replace("/(tabs)/profile"); // Fallback kung biglang nawala ang stack
+            }
+          }}
         />
         <Text style={styles.headerTitle}>POST_DETAIL</Text>
         <View style={{ width: 48 }} />
@@ -354,7 +410,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: THEME.bg,
   },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -370,7 +425,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: 1,
   },
-
   postMainCard: { padding: 16 },
   postHeader: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
   postHeaderInfo: { flex: 1, marginLeft: 12 },
@@ -384,12 +438,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   postImage: { width: "100%", height: 300, borderRadius: 20, marginBottom: 15 },
-
   countsRow: { flexDirection: "row", gap: 16, paddingVertical: 8 },
   countText: { color: THEME.accent, fontWeight: "600" },
-
   darkDivider: { backgroundColor: "#1A222E", height: 1 },
-
   actionsRow: { flexDirection: "row", paddingVertical: 5 },
   actionBtn: {
     flexDirection: "row",
@@ -398,17 +449,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionLabel: { color: THEME.muted, fontWeight: "600", marginLeft: -5 },
-
   commentsLabel: {
     fontWeight: "bold",
     color: THEME.accent,
     marginTop: 20,
     fontSize: 16,
   },
-
   listContent: { paddingBottom: 20 },
-
-  // COMMENT CARD (Friend Box Style)
   commentBoxWrapper: { paddingHorizontal: 16, marginTop: 12 },
   commentCard: {
     backgroundColor: THEME.card,
@@ -437,12 +484,11 @@ const styles = StyleSheet.create({
   commentName: { fontWeight: "bold", color: THEME.text, fontSize: 14 },
   commentTime: { color: THEME.muted, fontSize: 11 },
   commentText: { color: "#94A3B8", fontSize: 14 },
-
   inputBar: {
     padding: 10,
     backgroundColor: THEME.bg,
     borderTopWidth: 1,
     borderTopColor: "#1A222E",
   },
-  commentInput: { backgroundColor: "#1A222E", borderRadius: 15, height: 50 },
+  commentInput: { backgroundColor: "#1A222E", borderRadius: 15, minHeight: 50 },
 });

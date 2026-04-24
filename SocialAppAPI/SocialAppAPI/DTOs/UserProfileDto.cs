@@ -1,4 +1,4 @@
-namespace SocialAppAPI.DTOs
+﻿namespace SocialAppAPI.DTOs
 {
     // Data returned when viewing a user's profile
     public class UserProfileDto
@@ -10,5 +10,8 @@ namespace SocialAppAPI.DTOs
         public string? Bio { get; set; }
         public string? ProfilePictureUrl { get; set; }
         public DateTime CreatedAt { get; set; }
+        public int PostCount { get; set; }      // ← DAGDAG
+        public int FriendCount { get; set; }    // ← DAGDAG
+        public int LikeCount { get; set; }
     }
 }

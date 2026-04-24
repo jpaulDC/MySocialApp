@@ -9,6 +9,9 @@ export interface UserProfile {
   bio?: string;
   profilePictureUrl?: string;
   createdAt: string;
+  postCount?: number; // ← DAGDAG
+  friendCount?: number; // ← DAGDAG
+  likeCount?: number;
 }
 
 // ── GET MY PROFILE ─────────────────────────────────────────────────────

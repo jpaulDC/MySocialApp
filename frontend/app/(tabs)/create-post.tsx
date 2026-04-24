@@ -2,24 +2,25 @@
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    Button,
-    IconButton,
-    Surface,
-    Text,
-    TextInput,
+  Button,
+  IconButton,
+  Surface,
+  Text,
+  TextInput,
 } from "react-native-paper";
 import { createPost } from "../../services/postService";
 
-// THEME COLORS (Consistent sa previous screens)
+// THEME COLORS
 const THEME = {
   bg: "#0A0A0A",
   surface: "#1E293B",
@@ -38,7 +39,7 @@ export default function CreatePostScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
 
-  // Pick image from gallery - LOGIC INTACT
+  // ── FUNCTION PARA SA GALLERY ──
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -60,10 +61,34 @@ export default function CreatePostScreen() {
     }
   };
 
-  // Remove selected image - LOGIC INTACT
+  // ── FIXED: FUNCTION PARA SA REAL-TIME CAMERA ──
+  const handleCameraCapture = async () => {
+    // 1. Ask for Camera Permission
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Denied",
+        "Sorry, we need camera permissions to make this work!",
+      );
+      return;
+    }
+
+    // 2. Launch Camera
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true, // Para pwedeng i-crop o i-center ang picture
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    // 3. Real-time update sa screen
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
   const handleRemoveImage = () => setImageUri(null);
 
-  // Submit the post - LOGIC INTACT
   const handlePost = async () => {
     if (!content.trim() && !imageUri) {
       Alert.alert("Empty Post", "Please write something or attach an image.");
@@ -115,7 +140,6 @@ export default function CreatePostScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
       >
         <Surface style={styles.inputSection} elevation={1}>
-          {/* ── TEXT INPUT ── */}
           <TextInput
             placeholder="What's on your mind, explorer?"
             placeholderTextColor={THEME.muted}
@@ -131,7 +155,6 @@ export default function CreatePostScreen() {
             activeUnderlineColor="transparent"
           />
 
-          {/* Character count */}
           <Text
             style={[
               styles.charCount,
@@ -141,7 +164,6 @@ export default function CreatePostScreen() {
             {content.length}/500
           </Text>
 
-          {/* ── SELECTED IMAGE PREVIEW ── */}
           {imageUri && (
             <View style={styles.imagePreviewContainer}>
               <Image
@@ -161,26 +183,31 @@ export default function CreatePostScreen() {
         </Surface>
       </ScrollView>
 
-      {/* ── ATTACHMENT BAR (Floating at bottom) ── */}
+      {/* ── ATTACHMENT BAR (Fixed Camera Button) ── */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={100}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
       >
         <Surface style={styles.footerBar} elevation={5}>
           <Text variant="bodySmall" style={styles.attachLabel}>
             ATTACH DATA:
           </Text>
+
           <TouchableOpacity style={styles.attachBtn} onPress={handlePickImage}>
             <IconButton icon="image-plus" size={24} iconColor={THEME.accent} />
             <Text style={styles.attachBtnText}>Gallery</Text>
           </TouchableOpacity>
 
+          {/* DITO ANG PAGBABAGO: Camera is now Active */}
           <TouchableOpacity
-            style={[styles.attachBtn, { marginLeft: 10 }]}
-            onPress={() => {}} // Placeholder for camera logic if needed
+            style={[
+              styles.attachBtn,
+              { marginLeft: 10, borderColor: THEME.success },
+            ]}
+            onPress={handleCameraCapture}
           >
-            <IconButton icon="camera" size={24} iconColor={THEME.muted} />
-            <Text style={[styles.attachBtnText, { color: THEME.muted }]}>
+            <IconButton icon="camera" size={24} iconColor={THEME.success} />
+            <Text style={[styles.attachBtnText, { color: THEME.success }]}>
               Camera
             </Text>
           </TouchableOpacity>
@@ -190,13 +217,8 @@ export default function CreatePostScreen() {
   );
 }
 
-import { KeyboardAvoidingView } from "react-native";
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEME.bg,
-  },
+  container: { flex: 1, backgroundColor: THEME.bg },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -215,10 +237,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 16,
   },
-  postBtn: {
-    borderRadius: 4,
-    minWidth: 80,
-  },
+  postBtn: { borderRadius: 4, minWidth: 80 },
   inputSection: {
     margin: 16,
     borderRadius: 12,
@@ -239,7 +258,6 @@ const styles = StyleSheet.create({
     color: THEME.muted,
     fontSize: 12,
     marginBottom: 12,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   imagePreviewContainer: {
     position: "relative",
@@ -249,10 +267,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0, 245, 255, 0.3)",
   },
-  imagePreview: {
-    width: "100%",
-    height: 250,
-  },
+  imagePreview: { width: "100%", height: 250 },
   removeImageBtn: {
     position: "absolute",
     top: 4,
@@ -268,11 +283,7 @@ const styles = StyleSheet.create({
     borderTopColor: "rgba(0, 245, 255, 0.1)",
     paddingBottom: Platform.OS === "ios" ? 30 : 12,
   },
-  attachLabel: {
-    color: THEME.muted,
-    marginRight: 12,
-    fontWeight: "bold",
-  },
+  attachLabel: { color: THEME.muted, marginRight: 12, fontWeight: "bold" },
   attachBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -282,9 +293,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0, 245, 255, 0.1)",
   },
-  attachBtnText: {
-    color: THEME.accent,
-    fontWeight: "bold",
-    fontSize: 12,
-  },
+  attachBtnText: { color: THEME.accent, fontWeight: "bold", fontSize: 12 },
 });

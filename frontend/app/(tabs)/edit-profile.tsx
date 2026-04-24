@@ -2,27 +2,27 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Button,
-    IconButton,
-    Surface,
-    Text,
-    TextInput,
+  ActivityIndicator,
+  Avatar,
+  Button,
+  IconButton,
+  Surface,
+  Text,
+  TextInput,
 } from "react-native-paper";
 import {
-    getMyProfile,
-    updateProfile,
-    uploadProfilePicture,
-    UserProfile,
+  getMyProfile,
+  updateProfile,
+  uploadProfilePicture,
+  UserProfile,
 } from "../../services/userService";
 
 const BASE_URL = "http://192.168.1.105:5261";
@@ -92,7 +92,7 @@ export default function EditProfileScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, // Inayos ang type reference dito
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,

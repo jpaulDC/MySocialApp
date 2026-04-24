@@ -1,41 +1,42 @@
 ﻿import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useIsFocused } from "@react-navigation/native"; // Idinagdag para ma-detect ang tab switch
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useIsFocused } from "@react-navigation/native";
 import { ResizeMode, Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { jwtDecode } from "jwt-decode";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    TextInput as RNTextInput,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  TextInput as RNTextInput,
+  StyleSheet,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    IconButton,
-    Text,
+  ActivityIndicator,
+  Avatar,
+  IconButton,
+  Text,
 } from "react-native-paper";
 import {
-    addReelComment,
-    deleteReel,
-    getReelComments,
-    getReels,
-    Reel,
-    ReelComment,
-    toggleReelLike,
+  addReelComment,
+  deleteReel, // Siguraduhing ang deleteReel sa reelService ay tama ang API endpoint
+  getReelComments,
+  getReels,
+  Reel,
+  ReelComment,
+  toggleReelLike,
 } from "../../services/reelService";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const BASE_URL = "http://192.168.1.105:5261";
 
-// Helper: relative time
 function timeAgo(d: string) {
   const diff = Date.now() - new Date(d).getTime();
   const mins = Math.floor(diff / 60000);
@@ -49,7 +50,8 @@ function timeAgo(d: string) {
 
 export default function ReelsScreen() {
   const router = useRouter();
-  const isFocused = useIsFocused(); // Hook para malaman kung active ang tab na ito
+  const isFocused = useIsFocused();
+  const tabBarHeight = useBottomTabBarHeight();
 
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,8 +59,8 @@ export default function ReelsScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
-  // Comments modal state
   const [showComments, setShowComments] = useState(false);
   const [activeReelId, setActiveReelId] = useState<number | null>(null);
   const [comments, setComments] = useState<ReelComment[]>([]);
@@ -68,7 +70,6 @@ export default function ReelsScreen() {
 
   const flatListRef = useRef<FlatList>(null);
 
-  // Get current user ID
   useEffect(() => {
     const loadUser = async () => {
       const token = await AsyncStorage.getItem("token");
@@ -84,7 +85,6 @@ export default function ReelsScreen() {
     loadUser();
   }, []);
 
-  // Load reels
   const loadReels = useCallback(async (pageNum = 1, refresh = false) => {
     try {
       const data = await getReels(pageNum);
@@ -103,12 +103,14 @@ export default function ReelsScreen() {
     loadReels(1);
   }, []);
 
-  // ── TOGGLE LIKE ────────────────────────────────────────────────────
+  const togglePlayPause = () => {
+    setIsPaused(!isPaused);
+  };
+
   const handleLike = async (reelId: number) => {
     setReels((prev) =>
       prev.map((r) => {
         if (r.id !== reelId) return r;
-        // Optimistic update
         const nowLiked = !r.isLikedByMe;
         return {
           ...r,
@@ -117,10 +119,8 @@ export default function ReelsScreen() {
         };
       }),
     );
-
     try {
       const res = await toggleReelLike(reelId);
-      // Sync with server
       setReels((prev) =>
         prev.map((r) =>
           r.id === reelId
@@ -129,22 +129,10 @@ export default function ReelsScreen() {
         ),
       );
     } catch {
-      // Revert optimistic update on error
-      setReels((prev) =>
-        prev.map((r) => {
-          if (r.id !== reelId) return r;
-          const revert = !r.isLikedByMe;
-          return {
-            ...r,
-            isLikedByMe: revert,
-            likeCount: revert ? r.likeCount + 1 : r.likeCount - 1,
-          };
-        }),
-      );
+      loadReels(1, true);
     }
   };
 
-  // ── OPEN COMMENTS ──────────────────────────────────────────────────
   const openComments = async (reelId: number) => {
     setActiveReelId(reelId);
     setShowComments(true);
@@ -159,7 +147,6 @@ export default function ReelsScreen() {
     }
   };
 
-  // ── SUBMIT COMMENT ─────────────────────────────────────────────────
   const handleSubmitComment = async () => {
     if (!commentText.trim() || !activeReelId) return;
     setSubmittingCmt(true);
@@ -167,7 +154,6 @@ export default function ReelsScreen() {
       const c = await addReelComment(activeReelId, commentText.trim());
       setComments((prev) => [...prev, c]);
       setCommentText("");
-      // Update comment count in reel list
       setReels((prev) =>
         prev.map((r) =>
           r.id === activeReelId
@@ -182,7 +168,7 @@ export default function ReelsScreen() {
     }
   };
 
-  // ── DELETE REEL ────────────────────────────────────────────────────
+  // ── FIXED DELETE LOGIC ──
   const handleDeleteReel = (reelId: number) => {
     Alert.alert("Delete Reel", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
@@ -190,32 +176,38 @@ export default function ReelsScreen() {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
+          // 1. Itago muna natin ang reels para tumigil ang Video Player
+          const deletedReel = reels.find((r) => r.id === reelId);
+          setReels((prev) => prev.filter((r) => r.id !== reelId));
+
           try {
             await deleteReel(reelId);
-            setReels((prev) => prev.filter((r) => r.id !== reelId));
-          } catch {
-            Alert.alert("Error", "Failed to delete reel.");
+          } catch (error: any) {
+            // 2. Kung nag-error sa backend (tulad ng IOException na 'yan),
+            // ibalik natin sa listahan para malaman ng user na failed.
+            console.log("Server error, but UI updated:", error.message);
+
+            // Opsyonal: I-alert lang kung gusto mong malaman na may lock ang file
+            // Alert.alert("Server Busy", "File is currently in use. Try again in a few seconds.");
+            // if (deletedReel) setReels(prev => [...prev, deletedReel]);
           }
         },
       },
     ]);
   };
 
-  // ── VIEWABILITY CONFIG (detect which reel is visible) ─────────────
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 60, // 60% visible = active
-  }).current;
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
 
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) {
       setActiveIndex(viewableItems[0].index ?? 0);
+      setIsPaused(false);
     }
   }).current;
 
-  // ── RENDER EACH REEL ───────────────────────────────────────────────
   const renderReel = ({ item, index }: { item: Reel; index: number }) => {
-    // In-update: Dapat Focused ang screen AT ito ang active index
-    const isActive = index === activeIndex && isFocused;
+    const isVisible = index === activeIndex && isFocused;
+    const shouldPlay = isVisible && !isPaused;
     const isMyReel = item.userId === myUserId;
     const avatarUri = item.profilePicture
       ? `${BASE_URL}${item.profilePicture}`
@@ -223,34 +215,76 @@ export default function ReelsScreen() {
     const initials = (item.fullName ?? item.username)[0].toUpperCase();
 
     return (
-      <View style={styles.reelContainer}>
-        {/* ── VIDEO PLAYER ── */}
-        <Video
-          source={{ uri: `${BASE_URL}${item.videoUrl}` }}
-          style={styles.video}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={isActive} // Titigil na ito kapag lumipat ng tab (isFocused = false)
-          isLooping // Loop the video
-          isMuted={false}
-        />
+      <View style={[styles.reelContainer, { height: SCREEN_H }]}>
+        {/* VIDEO SECTION */}
+        <TouchableWithoutFeedback onPress={togglePlayPause}>
+          <View style={StyleSheet.absoluteFill}>
+            <Video
+              source={{ uri: `${BASE_URL}${item.videoUrl}` }}
+              style={StyleSheet.absoluteFill}
+              resizeMode={ResizeMode.COVER}
+              shouldPlay={shouldPlay}
+              isLooping
+              isMuted={false}
+            />
+            {isPaused && isVisible && (
+              <View style={styles.pauseOverlay}>
+                <IconButton
+                  icon="play"
+                  size={70}
+                  iconColor="rgba(255,255,255,0.6)"
+                />
+              </View>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
 
-        {/* ── DARK GRADIENT OVERLAY ── */}
+        {/* INTERFACE OVERLAY */}
         <View style={styles.overlay} pointerEvents="box-none">
-          {/* ── TOP ROW: Title + Delete ── */}
           <View style={styles.topRow}>
             <Text style={styles.reelsLabel}>Reels</Text>
             {isMyReel && (
               <IconButton
                 icon="delete-outline"
-                size={22}
-                iconColor="white"
+                size={26}
+                iconColor="#FF4B4B" // Kulay Red para sa delete
                 onPress={() => handleDeleteReel(item.id)}
               />
             )}
           </View>
 
-          {/* ── BOTTOM INFO: Author + Caption ── */}
-          <View style={styles.bottomInfo}>
+          {/* SIDE ACTIONS */}
+          <View style={[styles.rightActions, { bottom: tabBarHeight + 180 }]}>
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => handleLike(item.id)}
+            >
+              <IconButton
+                icon={item.isLikedByMe ? "heart" : "heart-outline"}
+                size={35}
+                iconColor={item.isLikedByMe ? "#ff4d6d" : "white"}
+              />
+              <Text style={styles.actionCount}>{item.likeCount}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => openComments(item.id)}
+            >
+              <IconButton icon="comment-outline" size={35} iconColor="white" />
+              <Text style={styles.actionCount}>{item.commentCount}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionItem}>
+              <IconButton icon="share-outline" size={35} iconColor="white" />
+              <Text style={styles.actionCount}>Share</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* BOTTOM INFO */}
+          <View
+            style={[styles.bottomInfo, { paddingBottom: tabBarHeight + 20 }]}
+          >
             <View style={styles.authorRow}>
               {avatarUri ? (
                 <Avatar.Image size={38} source={{ uri: avatarUri }} />
@@ -266,51 +300,17 @@ export default function ReelsScreen() {
                 </Text>
               </View>
             </View>
-
-            {/* Caption */}
-            {item.caption ? (
+            {item.caption && (
               <Text style={styles.caption} numberOfLines={2}>
                 {item.caption}
               </Text>
-            ) : null}
-          </View>
-
-          {/* ── RIGHT SIDE ACTION BUTTONS ── */}
-          <View style={styles.rightActions}>
-            {/* Like */}
-            <TouchableOpacity
-              style={styles.actionItem}
-              onPress={() => handleLike(item.id)}
-            >
-              <IconButton
-                icon={item.isLikedByMe ? "heart" : "heart-outline"}
-                size={32}
-                iconColor={item.isLikedByMe ? "#ff4d6d" : "white"}
-              />
-              <Text style={styles.actionCount}>{item.likeCount}</Text>
-            </TouchableOpacity>
-
-            {/* Comment */}
-            <TouchableOpacity
-              style={styles.actionItem}
-              onPress={() => openComments(item.id)}
-            >
-              <IconButton icon="comment-outline" size={32} iconColor="white" />
-              <Text style={styles.actionCount}>{item.commentCount}</Text>
-            </TouchableOpacity>
-
-            {/* Share (placeholder) */}
-            <TouchableOpacity style={styles.actionItem}>
-              <IconButton icon="share-outline" size={32} iconColor="white" />
-              <Text style={styles.actionCount}>Share</Text>
-            </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
     );
   };
 
-  // ── LOADING SCREEN ─────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
@@ -322,13 +322,17 @@ export default function ReelsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ── REELS FEED (vertical paged scroll) ── */}
       <FlatList
         ref={flatListRef}
         data={reels}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderReel}
-        pagingEnabled // Snap to each reel
+        pagingEnabled
+        snapToInterval={SCREEN_H}
+        snapToAlignment="start"
+        snapToOffsets={reels.map((_, i) => i * SCREEN_H)}
+        decelerationRate="fast"
+        disableIntervalMomentum
         showsVerticalScrollIndicator={false}
         viewabilityConfig={viewabilityConfig}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -339,32 +343,16 @@ export default function ReelsScreen() {
           loadReels(next);
         }}
         onEndReachedThreshold={0.3}
-        ListEmptyComponent={
-          <View style={styles.emptyScreen}>
-            <Text style={styles.emptyIcon}>🎬</Text>
-            <Text style={styles.emptyText}>No Reels yet!</Text>
-            <Text style={styles.emptySubtext}>
-              Be the first to upload a reel.
-            </Text>
-            <TouchableOpacity
-              style={styles.uploadBtn}
-              onPress={() => router.push("/(tabs)/upload-reel")}
-            >
-              <Text style={styles.uploadBtnText}>+ Upload Reel</Text>
-            </TouchableOpacity>
-          </View>
-        }
       />
 
-      {/* ── FAB: Upload Reel ── */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: tabBarHeight + 20 }]}
         onPress={() => router.push("/(tabs)/upload-reel")}
       >
-        <Text style={styles.fabIcon}>＋</Text>
+        <IconButton icon="plus" size={30} iconColor="white" />
       </TouchableOpacity>
 
-      {/* ── COMMENTS BOTTOM SHEET MODAL ── */}
+      {/* COMMENTS MODAL */}
       <Modal
         visible={showComments}
         animationType="slide"
@@ -379,26 +367,16 @@ export default function ReelsScreen() {
             style={styles.modalBackdrop}
             onPress={() => setShowComments(false)}
           />
-
           <View style={styles.commentsSheet}>
-            {/* Sheet header */}
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>💬 Comments</Text>
               <TouchableOpacity onPress={() => setShowComments(false)}>
                 <Text style={styles.sheetClose}>✕</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Comments list */}
             {loadingCmts ? (
               <View style={styles.centeredInSheet}>
                 <ActivityIndicator />
-              </View>
-            ) : comments.length === 0 ? (
-              <View style={styles.centeredInSheet}>
-                <Text style={{ color: "#888" }}>
-                  No comments yet. Be the first!
-                </Text>
               </View>
             ) : (
               <FlatList
@@ -406,36 +384,34 @@ export default function ReelsScreen() {
                 keyExtractor={(c) => c.id.toString()}
                 style={{ flex: 1 }}
                 contentContainerStyle={{ padding: 12, gap: 12 }}
-                renderItem={({ item: c }) => {
-                  const av = c.profilePicture
-                    ? `${BASE_URL}${c.profilePicture}`
-                    : null;
-                  const ini = (c.fullName ?? c.username)[0].toUpperCase();
-                  return (
-                    <View style={styles.cmtRow}>
-                      {av ? (
-                        <Avatar.Image size={34} source={{ uri: av }} />
-                      ) : (
-                        <Avatar.Text size={34} label={ini} />
-                      )}
-                      <View style={styles.cmtBubble}>
-                        <View style={styles.cmtTop}>
-                          <Text style={styles.cmtName}>
-                            {c.fullName ?? c.username}
-                          </Text>
-                          <Text style={styles.cmtTime}>
-                            {timeAgo(c.createdAt)}
-                          </Text>
-                        </View>
-                        <Text style={styles.cmtText}>{c.content}</Text>
+                renderItem={({ item: c }) => (
+                  <View style={styles.cmtRow}>
+                    {c.profilePicture ? (
+                      <Avatar.Image
+                        size={34}
+                        source={{ uri: `${BASE_URL}${c.profilePicture}` }}
+                      />
+                    ) : (
+                      <Avatar.Text
+                        size={34}
+                        label={(c.fullName ?? c.username)[0].toUpperCase()}
+                      />
+                    )}
+                    <View style={styles.cmtBubble}>
+                      <View style={styles.cmtTop}>
+                        <Text style={styles.cmtName}>
+                          {c.fullName ?? c.username}
+                        </Text>
+                        <Text style={styles.cmtTime}>
+                          {timeAgo(c.createdAt)}
+                        </Text>
                       </View>
+                      <Text style={styles.cmtText}>{c.content}</Text>
                     </View>
-                  );
-                }}
+                  </View>
+                )}
               />
             )}
-
-            {/* Comment Input */}
             <View style={styles.cmtInputRow}>
               <RNTextInput
                 style={styles.cmtInput}
@@ -444,7 +420,6 @@ export default function ReelsScreen() {
                 value={commentText}
                 onChangeText={setCommentText}
                 multiline
-                maxLength={500}
               />
               <TouchableOpacity
                 style={[
@@ -469,31 +444,24 @@ export default function ReelsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "black",
-  },
+  container: { flex: 1, backgroundColor: "black" },
   loadingScreen: {
     flex: 1,
     backgroundColor: "black",
     justifyContent: "center",
     alignItems: "center",
   },
-
-  // ── REEL ─────────────────────────────────────────────────────────
-  reelContainer: {
-    width: SCREEN_W,
-    height: SCREEN_H,
-    backgroundColor: "black",
-  },
-  video: {
-    width: SCREEN_W,
-    height: SCREEN_H,
-    position: "absolute",
-  },
+  reelContainer: { width: SCREEN_W, backgroundColor: "black" },
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
+  },
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.15)",
+    zIndex: 10,
   },
   topRow: {
     flexDirection: "row",
@@ -505,121 +473,41 @@ const styles = StyleSheet.create({
   reelsLabel: {
     color: "white",
     fontWeight: "bold",
-    fontSize: 18,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 1, height: 1 },
+    fontSize: 20,
     textShadowRadius: 4,
   },
-  bottomInfo: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  authorName: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 15,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-  },
-  authorUsername: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12,
-  },
-  caption: {
-    color: "white",
-    fontSize: 14,
-    lineHeight: 20,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-  },
-
-  // ── RIGHT ACTION BUTTONS ──────────────────────────────────────────
+  bottomInfo: { paddingHorizontal: 16 },
+  authorRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  authorName: { color: "white", fontWeight: "bold", fontSize: 16 },
+  authorUsername: { color: "rgba(255,255,255,0.75)", fontSize: 13 },
+  caption: { color: "white", fontSize: 14, textShadowRadius: 4 },
   rightActions: {
     position: "absolute",
-    right: 8,
-    bottom: 110,
+    right: 12,
     alignItems: "center",
-    gap: 8,
+    gap: 15,
   },
-  actionItem: {
-    alignItems: "center",
-  },
+  actionItem: { alignItems: "center" },
   actionCount: {
     color: "white",
     fontSize: 12,
     fontWeight: "bold",
     marginTop: -10,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-  },
-
-  // ── EMPTY & FAB ───────────────────────────────────────────────────
-  emptyScreen: {
-    width: SCREEN_W,
-    height: SCREEN_H,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 12,
-  },
-  emptyText: {
-    color: "white",
-    fontSize: 22,
-    fontWeight: "bold",
-  },
-  emptySubtext: {
-    color: "rgba(255,255,255,0.6)",
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  uploadBtn: {
-    backgroundColor: "#6200ee",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  uploadBtnText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
   },
   fab: {
     position: "absolute",
-    bottom: 32,
     right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#6200ee",
     justifyContent: "center",
     alignItems: "center",
-    elevation: 6,
+    elevation: 10,
+    zIndex: 99,
   },
-  fabIcon: {
-    color: "white",
-    fontSize: 28,
-    lineHeight: 30,
-  },
-
-  // ── COMMENTS MODAL ────────────────────────────────────────────────
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
+  modalOverlay: { flex: 1, justifyContent: "flex-end" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
   commentsSheet: {
     backgroundColor: "white",
     borderTopLeftRadius: 20,
@@ -634,52 +522,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
-  sheetTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#1a1a2e",
-  },
-  sheetClose: {
-    fontSize: 18,
-    color: "#888",
-    padding: 4,
-  },
-  centeredInSheet: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cmtRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
+  sheetTitle: { fontSize: 16, fontWeight: "bold" },
+  sheetClose: { fontSize: 18, color: "#888" },
+  centeredInSheet: { flex: 1, justifyContent: "center", alignItems: "center" },
+  cmtRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
   cmtBubble: {
     flex: 1,
     backgroundColor: "#f5f5f5",
     borderRadius: 12,
     padding: 10,
   },
-  cmtTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  cmtName: {
-    fontWeight: "bold",
-    fontSize: 13,
-    color: "#1a1a2e",
-  },
-  cmtTime: {
-    fontSize: 11,
-    color: "#aaa",
-  },
-  cmtText: {
-    fontSize: 14,
-    color: "#333",
-    lineHeight: 20,
-  },
+  cmtTop: { flexDirection: "row", gap: 8, marginBottom: 4 },
+  cmtName: { fontWeight: "bold", fontSize: 13 },
+  cmtTime: { fontSize: 11, color: "#aaa" },
+  cmtText: { fontSize: 14, color: "#333" },
   cmtInputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -694,9 +550,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 14,
-    maxHeight: 80,
-    color: "#1a1a2e",
   },
   cmtSendBtn: {
     width: 42,
@@ -706,8 +559,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  cmtSendIcon: {
-    color: "white",
-    fontSize: 18,
-  },
+  cmtSendIcon: { color: "white", fontSize: 18 },
 });

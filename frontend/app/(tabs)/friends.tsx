@@ -170,6 +170,7 @@ export default function FriendsScreen() {
     try {
       await sendFriendRequest(userId);
       Alert.alert("TRANSMITTED", "Friend request sent to " + username);
+      loadData(); // I-refresh para maging "PENDING" ang button status
     } catch (e: any) {
       Alert.alert("Blocked", e.response?.data?.message ?? "Link failed.");
     }
@@ -219,8 +220,6 @@ export default function FriendsScreen() {
               size={22}
               iconColor={THEME.accent}
               onPress={() => {
-                setSelectedFriend(item);
-                // We directly trigger the message push
                 router.push({
                   pathname: "/(tabs)/chat",
                   params: {
@@ -279,62 +278,93 @@ export default function FriendsScreen() {
     </Surface>
   );
 
-  const renderSearchResult = ({ item }: { item: UserProfile }) => (
-    <Surface style={styles.card} elevation={1}>
-      <TouchableOpacity
-        onPress={() =>
-          router.push({
-            pathname: "/(tabs)/view-profile",
-            params: { userId: item.id.toString() },
-          })
-        }
-        activeOpacity={0.8}
-      >
-        <View style={styles.cardRow}>
-          {renderAvatar(item)}
-          <View style={styles.cardInfo}>
-            <Text variant="titleMedium" style={styles.name}>
-              {item.fullName ?? item.username}
-            </Text>
-            <Text variant="bodySmall" style={styles.username}>
-              @{item.username}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-      <View style={styles.searchActions}>
-        <Button
-          mode="outlined"
-          icon="message"
-          compact
-          style={styles.searchBtn}
-          textColor={THEME.accent}
+  const renderSearchResult = ({ item }: { item: UserProfile }) => {
+    // LOGIC: I-check kung nasa friends list o pending requests list na ba siya
+    const isAlreadyFriend = friends.some((f) => f.userId === item.id);
+    const isPending = requests.some((r) => r.userId === item.id);
+
+    return (
+      <Surface style={styles.card} elevation={1}>
+        <TouchableOpacity
           onPress={() =>
             router.push({
-              pathname: "/(tabs)/chat",
-              params: {
-                userId: item.id.toString(),
-                username: item.username,
-                fullName: item.fullName ?? item.username,
-                picture: item.profilePictureUrl ?? "",
-              },
+              pathname: "/(tabs)/view-profile",
+              params: { userId: item.id.toString() },
             })
           }
+          activeOpacity={0.8}
         >
-          MESSAGE
-        </Button>
-        <Button
-          mode="contained"
-          compact
-          icon="account-plus"
-          style={[styles.searchBtn, { backgroundColor: THEME.primary }]}
-          onPress={() => handleSendRequest(item.id, item.username)}
-        >
-          ADD LINK
-        </Button>
-      </View>
-    </Surface>
-  );
+          <View style={styles.cardRow}>
+            {renderAvatar(item)}
+            <View style={styles.cardInfo}>
+              <Text variant="titleMedium" style={styles.name}>
+                {item.fullName ?? item.username}
+              </Text>
+              <Text variant="bodySmall" style={styles.username}>
+                @{item.username}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        <View style={styles.searchActions}>
+          <Button
+            mode="outlined"
+            icon="message"
+            compact
+            style={styles.searchBtn}
+            textColor={THEME.accent}
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/chat",
+                params: {
+                  userId: item.id.toString(),
+                  username: item.username,
+                  fullName: item.fullName ?? item.username,
+                  picture: item.profilePictureUrl ?? "",
+                },
+              })
+            }
+          >
+            MESSAGE
+          </Button>
+
+          {isAlreadyFriend ? (
+            <Button
+              mode="contained"
+              compact
+              icon="check-decagram"
+              style={[styles.searchBtn, { backgroundColor: THEME.success }]}
+              onPress={() =>
+                Alert.alert("Linked", "You are already connected.")
+              }
+            >
+              LINKED
+            </Button>
+          ) : isPending ? (
+            <Button
+              mode="contained"
+              compact
+              icon="clock-outline"
+              style={[styles.searchBtn, { backgroundColor: THEME.muted }]}
+              onPress={() => Alert.alert("Pending", "Waiting for response.")}
+            >
+              PENDING
+            </Button>
+          ) : (
+            <Button
+              mode="contained"
+              compact
+              icon="account-plus"
+              style={[styles.searchBtn, { backgroundColor: THEME.primary }]}
+              onPress={() => handleSendRequest(item.id, item.username)}
+            >
+              ADD LINK
+            </Button>
+          )}
+        </View>
+      </Surface>
+    );
+  };
 
   return (
     <View style={styles.container}>

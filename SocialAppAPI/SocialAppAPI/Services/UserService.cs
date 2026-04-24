@@ -21,10 +21,18 @@ namespace SocialAppAPI.Services
         {
             var user = await _context.Users.FindAsync(userId);
 
-            // Return null if user doesn't exist
             if (user == null) return null;
 
-            // Map User model → UserProfileDto (never expose PasswordHash!)
+            // Kunin ang stats mula sa database
+            var postCount = await _context.Posts
+                .CountAsync(p => p.UserId == userId);
+            var friendCount = await _context.Friendships
+                .CountAsync(f => (f.RequesterId == userId || f.AddresseeId == userId)
+                              && f.Status == FriendshipStatus.Accepted);
+
+            var likeCount = await _context.Likes
+                .CountAsync(l => l.UserId == userId);
+
             return new UserProfileDto
             {
                 Id = user.Id,
@@ -33,7 +41,10 @@ namespace SocialAppAPI.Services
                 FullName = user.FullName,
                 Bio = user.Bio,
                 ProfilePictureUrl = user.ProfilePictureUrl,
-                CreatedAt = user.CreatedAt
+                CreatedAt = user.CreatedAt,
+                PostCount = postCount,
+                FriendCount = friendCount,
+                LikeCount = likeCount
             };
         }
 
